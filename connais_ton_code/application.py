@@ -10,17 +10,11 @@ from PyQt6.QtWidgets import QApplication
 
 from .apparence import appliquer_theme_sombre
 from .barre_menu import BarreMenu
-from .detecteur import (
-    INTERVALLE_MINIMUM_S,
-    Detecteur,
-    DetecteurClaudeCode,
-    DetecteurFactice,
-)
 from .evaluateur import Evaluateur, EvaluateurFactice, EvaluateurMistral, cle_mistral
 from .historique import Historique
 from .orchestrateur import Orchestrateur
 from .panneau import Panneau
-from .reglages import Reglages
+from .projet import Projet, ProjetClaudeCode, ProjetFactice
 from .selecteur import Selecteur, SelecteurFactice, SelecteurProjet
 
 
@@ -56,16 +50,14 @@ def _autoriser_ctrl_c(application: QApplication) -> None:
     reveil.timeout.connect(lambda: None)
 
 
-def _choisir_detecteur(factice: bool, reglages: Reglages) -> Detecteur:
+def _choisir_projet(factice: bool) -> Projet:
     if factice:
-        return DetecteurFactice()
-    reel = DetecteurClaudeCode(
-        intervalle_minimum=reglages.intervalle_minimum(INTERVALLE_MINIMUM_S)
-    )
+        return ProjetFactice()
+    reel = ProjetClaudeCode()
     if reel.disponible():
         return reel
-    print("~/.claude/projects/ introuvable : détection désactivée.")
-    return DetecteurFactice()
+    print("~/.claude/projects/ introuvable : le projet en cours restera inconnu.")
+    return ProjetFactice()
 
 
 def _choisir_evaluateur(factice: bool) -> Evaluateur:
@@ -86,15 +78,14 @@ def _choisir_selecteur(factice: bool) -> Selecteur:
 
 
 def construire(application: QApplication, factice: bool = False) -> Orchestrateur:
-    """Monte l'application et rend l'orchestrateur, déjà démarré.
+    """Monte l'application et rend l'orchestrateur.
 
-    `factice` force les trois briques bouchonnées, ce dont a besoin la
-    vérification : elle ne doit dépendre ni du disque, ni du réseau, ni de la
-    présence d'une session Claude Code en cours.
+    `factice` force les briques bouchonnées, ce dont a besoin la vérification :
+    elle ne doit dépendre ni du disque, ni du réseau, ni de la présence d'une
+    session Claude Code en cours.
     """
     appliquer_theme_sombre()
 
-    reglages = Reglages()
     historique = Historique()
 
     panneau = Panneau()
@@ -106,15 +97,12 @@ def construire(application: QApplication, factice: bool = False) -> Orchestrateu
     orchestrateur = Orchestrateur(
         panneau=panneau,
         barre=barre,
-        detecteur=_choisir_detecteur(factice, reglages),
+        projet=_choisir_projet(factice),
         selecteur=_choisir_selecteur(factice),
         evaluateur=_choisir_evaluateur(factice),
         historique=historique,
-        reglages=reglages,
         parent=application,
     )
-    orchestrateur.demarrer()
-
     # Le panneau est gardé vivant par l'orchestrateur, qui appartient à
     # l'application ; et le refermer ne doit pas arrêter le programme.
     application.setQuitOnLastWindowClosed(False)

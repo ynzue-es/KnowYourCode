@@ -4,17 +4,15 @@
 
 Clin d'œil au KYC bancaire : connaître son code plutôt que son client.
 
-Un utilitaire de barre de menus pour macOS. Quand une session Claude Code se
-met à travailler, il vous prévient. Quand ça vous arrange, vous ouvrez son
-panneau : il tire au hasard une fonction du projet en cours et vous demande de
-l'expliquer. Un modèle tiers compare votre explication au code et vous dit ce
-que vous avez oublié.
+Un utilitaire de barre de menus pour macOS. Quand vous avez un moment, vous
+ouvrez son panneau : il tire au hasard une fonction du projet en cours et vous
+demande de l'expliquer. Un modèle tiers compare votre explication au code et
+vous dit ce que vous avez oublié.
 
 Le but n'est pas de noter, c'est de garder la maîtrise d'un code qu'on ne
 relit plus, et de s'entraîner au passage sur Python et TypeScript.
 
-Rien ne s'ouvre tout seul par-dessus votre travail. Une détection prévient,
-elle n'interrompt pas.
+Rien ne s'ouvre tout seul, jamais. C'est vous qui décidez du moment.
 
 ## Installation
 
@@ -46,9 +44,7 @@ Depuis un terminal :
 python -m connais_ton_code
 ```
 
-Ou en application à double-cliquer, ce qui est préférable : c'est la seule
-façon pour macOS de connaître l'application sous son nom, et donc d'afficher
-ses notifications comme venant de KnowYourCode plutôt que de Python.
+Ou en application à double-cliquer :
 
 ```bash
 python outils/creer_app.py
@@ -59,33 +55,37 @@ Le paquet ainsi fabriqué contient le chemin de ce dépôt : il n'est pas
 transportable d'une machine à l'autre, mais il se refait en une commande. Vous
 pouvez le glisser dans le dossier Applications ou le mettre au démarrage.
 
-À la première notification, macOS demandera l'autorisation de les afficher. Si
-vous refusez, ou si vous êtes en mode concentration, rien n'est perdu : une
-pastille apparaît sur l'icône.
+## Le rappel dans Claude Code
+
+Plutôt qu'une notification, qui suppose une autorisation du système et
+disparaît en trois secondes, le rappel se glisse là où le regard se pose déjà :
+le compteur d'attente de Claude Code.
+
+`outils/phrases_attente.py` écrit un bloc `spinnerVerbs` dans
+`~/.claude/settings.json`. Pendant que Claude travaille, le terminal affiche
+« Révise pendant que je travaille », « Connais ton code, pas seulement ton
+client », et une douzaine d'autres.
+
+```bash
+python outils/phrases_attente.py
+```
+
+Le script conserve le reste du fichier et n'écrase que ce bloc. Redémarrez
+Claude Code pour le voir.
 
 ## L'icône
 
 L'application n'apparaît pas dans le Dock. Sa seule présence permanente est
-une icône dans la barre de menus, en haut à droite, qui dit son état sans
-qu'on ait à cliquer :
+une icône dans la barre de menus, en haut à droite. Un clic ouvre le panneau,
+sous l'icône. Tout s'y trouve : la question, la réponse, le verdict, la
+progression et le bouton pour quitter.
 
-| Icône | Sens |
-| --- | --- |
-| écran avec `</>` | à l'écoute |
-| écran vide | détection en pause |
-| pastille à droite | une question vous attend |
-
-Un clic ouvre le panneau, sous l'icône. Tout s'y trouve : la question, la
-réponse, le verdict, la progression, l'interrupteur de détection et le
-bouton pour quitter.
-
-Le panneau a deux sections, choisies par un sélecteur en haut : Question,
-qui porte le cycle décrit ci-dessous, et Progression, qui montre le tableau
-de bord. Le passage de l'une à l'autre n'est permis que depuis Fermé, Repos
-ou Retour : rien n'y est en train de s'écrire, donc rien à perdre. Depuis
-Question ou Évaluation, le choix reste sans effet : une réponse en cours de
-saisie ou une évaluation en train de revenir sont un travail que la
-consultation des statistiques ne doit pas interrompre.
+Le panneau a deux sections, choisies par un sélecteur en haut : Question, qui
+porte le cycle décrit ci-dessous, et Progression, qui montre le tableau de
+bord. Le passage de l'une à l'autre n'est permis que depuis Fermé, Repos ou
+Retour : rien n'y est en train de s'écrire, donc rien à perdre. Depuis
+Question ou Évaluation, le choix reste sans effet, une réponse en cours de
+saisie ne doit pas être interrompue par la consultation de statistiques.
 
 ## Vérification
 
@@ -95,17 +95,17 @@ python verifier.py
 
 Le script contrôle d'abord le repérage des fonctions et le calcul des
 statistiques, sur des historiques construits à la main plutôt que rejoués
-depuis un fichier, puis déroule un cycle complet dans l'interface :
-détection, ouverture, réponse, évaluation, retour, consultation du tableau
-de bord, fermeture, pause et reprise. Il ouvre le panneau à l'écran pendant
-quelques secondes, et rend un code de sortie non nul en cas d'échec. Il n'a
-besoin ni de réseau, ni de clé, ni d'une session Claude Code en cours.
+depuis un fichier, puis déroule un cycle complet dans l'interface : ouverture,
+question, réponse, évaluation, retour, consultation du tableau de bord,
+passage, fermeture. Il ouvre le panneau à l'écran pendant quelques secondes,
+et rend un code de sortie non nul en cas d'échec. Il n'a besoin ni de réseau,
+ni de clé, ni d'une session Claude Code en cours.
 
 ## Le cycle
 
 1. **Fermé** — l'état par défaut, seule l'icône est visible.
 2. **Repos** — le panneau est ouvert, rien n'est demandé. Un bouton permet de
-   réclamer une question tout de suite.
+   réclamer une question.
 3. **Question** — le chemin du fichier, le nom de la fonction, le code coloré,
    une zone de saisie, les boutons Répondre (Cmd+Entrée) et Passer.
 4. **Évaluation** — un indicateur d'attente ; le panneau reste utilisable.
@@ -113,48 +113,29 @@ besoin ni de réseau, ni de clé, ni d'une session Claude Code en cours.
 6. **Tableau** — la section Progression : le nombre de réponses, le score
    moyen et le score récent, la courbe des vingt derniers scores, ce qui
    revient le plus souvent dans les oublis, les fonctions les moins bien
-   expliquées et la répartition par langage. Tant qu'aucune réponse n'a
-   été donnée, la section dit juste qu'il n'y a encore rien à montrer,
-   plutôt que d'afficher des zéros qui ne diraient rien.
+   expliquées et la répartition par langage. Tant qu'aucune réponse n'a été
+   donnée, la section dit juste qu'il n'y a encore rien à montrer, plutôt que
+   d'afficher des zéros qui ne diraient rien.
 
 Les transitions autorisées sont déclarées dans `etats.py` et vérifiées à
 chaque passage : une transition hors table est traitée comme un bug, pas comme
 un cas à absorber en silence.
 
-Une détection ne fait entrer dans aucun de ces états : elle se contente de
-noter qu'une question attend, d'envoyer une notification et d'allumer la
-pastille. L'extrait n'est tiré qu'au moment où vous ouvrez le panneau, pour
-qu'une notification ignorée ne consomme pas de question.
-
 ## Comment ça marche
 
-**La détection** (`detecteur.py`) guette le moment où vous envoyez un prompt,
-dans les transcripts JSONL sous `~/.claude/projects/`. Elle lit ce qui s'est
-ajouté au transcript depuis son dernier passage et y cherche un message de
-l'utilisateur.
+**Le projet en cours** (`projet.py`) se lit dans les transcripts JSONL de
+Claude Code, sous `~/.claude/projects/`. Le transcript modifié en dernier
+désigne la session la plus récente, et son champ `cwd` donne le dossier de
+travail. Ce champ plutôt que le nom du dossier parent, qui encode le chemin en
+remplaçant les barres par des tirets et n'est donc pas réversible dès qu'un
+nom contient lui-même un tiret.
 
-La date de modification du fichier ne suffisait pas : Claude Code y écrit
-pendant tout son tour, si bien qu'elle ne distingue pas le début du travail de
-son déroulement. Le contenu, lui, le dit exactement. Encore faut-il trier :
-les résultats d'outils sont enregistrés comme des messages de l'utilisateur
-alors que c'est Claude qui se répond à lui-même, et ils sont dix fois plus
-nombreux que les vrais prompts. Restent les lignes injectées par Claude Code,
-retours de commandes et comptes rendus de tâches, reconnaissables à la balise
-qui les ouvre.
-
-Aucun délai n'est imposé entre deux détections : une question déjà en attente
-empêche la suivante, ce qui suffit. Pour espacer davantage, ajoutez
-`"intervalle_minimum_secondes": 300` dans `~/.knowyourcode/reglages.json`.
-
-Le dossier du projet est lu dans le champ `cwd` du transcript, et non déduit
-du nom du dossier, qui n'est pas réversible.
-
-**La sélection** (`selecteur.py`, `extraction.py`) parcourt le projet détecté
-et tire une fonction au hasard parmi celles de 4 à 60 lignes. Les fonctions
-Python sont repérées avec `ast`, les fonctions TypeScript et TSX par un
-comptage d'accolades qui saute les chaînes et les commentaires. Au hasard, et
-non « la plus récente » : le code qu'on ne comprend plus n'est pas toujours
-celui qu'on vient d'écrire.
+**La sélection** (`selecteur.py`, `extraction.py`) parcourt ce projet et tire
+une fonction au hasard parmi celles de 4 à 60 lignes. Les fonctions Python
+sont repérées avec `ast`, les fonctions TypeScript et TSX par un comptage
+d'accolades qui saute les chaînes et les commentaires. Au hasard, et non « la
+plus récente » : le code qu'on ne comprend plus n'est pas toujours celui qu'on
+vient d'écrire.
 
 **L'évaluation** (`evaluateur.py`) envoie le code et votre explication à
 `mistral-small-latest` et en attend un verdict, une note et une liste de ce
@@ -163,7 +144,7 @@ code : on ne demande pas à quelqu'un de corriger la copie qu'il a dictée.
 L'appel a lieu hors du fil de l'interface, qui reste utilisable pendant ce
 temps.
 
-Chacune de ces trois briques est un `Protocol` doublé d'une version factice,
+Chacune de ces briques est un `Protocol` doublé d'une version factice,
 utilisée par la vérification et comme repli quand la vraie n'est pas
 disponible.
 
@@ -174,8 +155,6 @@ Tout reste sur la machine, en clair, dans `~/.knowyourcode/` :
 - `historique.json` — les questions posées, la réponse donnée, l'évaluation et
   la date. Sert à ne pas reposer deux fois la même question, et à mesurer la
   progression.
-- `reglages.json` — l'état de la détection, et son intervalle minimum si vous
-  le réglez.
 - `cle_mistral` — la clé d'API, si vous choisissez cette méthode. Hors du
   dépôt, exprès.
 
@@ -186,14 +165,14 @@ se sert `verifier.py` pour ne pas polluer l'historique réel.
 
 - **L'apparence.** Les composants viennent de PyQt6-Fluent-Widgets, mais le
   cadre est dessiné à la main : panneau sombre sans bordure de titre, coins
-  arrondis, ombre douce, police d'interface du système. Le rendu Fluent
-  d'origine, avec sa barre de titre et sa police Segoe UI, jure franchement à
-  côté d'un terminal macOS. Aucun composant de la version Pro n'est utilisé.
+  arrondis, police d'interface du système. Le rendu Fluent d'origine, avec sa
+  barre de titre et sa police Segoe UI, jure franchement à côté d'un terminal
+  macOS. Aucun composant de la version Pro n'est utilisé.
 - **Le logo et l'icône** sont décrits en tracés dans `logo.py`, jamais chargés
   depuis un fichier image. Le même dessin sert au logo en couleur, à l'icône
-  monochrome de la barre et au `.icns` de l'application. L'icône de la barre
-  est déclarée comme masque : macOS la recolore selon le thème, comme les
-  siennes.
+  monochrome de la barre, à celle de l'entête du panneau et au `.icns` de
+  l'application. L'icône de la barre est déclarée comme masque : macOS la
+  recolore selon le thème, comme les siennes.
 - **Le paquet.** `outils/creer_app.py` copie dans le paquet le véritable
   exécutable Python, et non le relais `bin/python3` qui ré-exécuterait
   `Python.app` et rendrait à macOS l'identité de Python. La copie est

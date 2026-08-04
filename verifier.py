@@ -36,7 +36,6 @@ from connais_ton_code.application import (  # noqa: E402
     attendre_les_evaluations,
     construire,
 )
-from connais_ton_code.detecteur import DetecteurClaudeCode  # noqa: E402
 from connais_ton_code.etats import Etat  # noqa: E402
 from connais_ton_code.extraction import fonctions  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
@@ -239,70 +238,6 @@ def verifier_statistiques() -> None:
     )
 
 
-def verifier_detection() -> None:
-    """Contrôles sans interface sur la détection d'un prompt.
-
-    C'est la partie la plus facile à casser du détecteur : sur un transcript
-    réel, les résultats d'outils et les lignes injectées par Claude Code sont
-    enregistrés comme des messages de l'utilisateur, et représentent la très
-    grande majorité des lignes. Les prendre pour des prompts déclencherait en
-    permanence.
-    """
-    racine = Path(tempfile.mkdtemp(prefix="knowyourcode-transcripts-"))
-    projet = racine / "-Users-untel-Documents-Essai"
-    projet.mkdir()
-    transcript = projet / "session.jsonl"
-
-    def ajouter(objet: dict) -> None:
-        with transcript.open("a", encoding="utf-8") as fichier:
-            fichier.write(json.dumps(objet, ensure_ascii=False) + "\n")
-
-    ajouter(
-        {
-            "type": "user",
-            "cwd": "/Users/untel/Documents/Essai",
-            "message": {"content": "un prompt d'hier"},
-        }
-    )
-
-    detecteur = DetecteurClaudeCode(dossier=racine)
-    _verifier(
-        not detecteur.session_active(),
-        "au premier tour, la détection ne rejoue pas l'historique",
-    )
-
-    ajouter({"type": "assistant", "message": {"content": [{"type": "text", "text": "je travaille"}]}})
-    _verifier(
-        not detecteur.session_active(), "Claude qui écrit ne déclenche pas"
-    )
-
-    ajouter({"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}})
-    _verifier(
-        not detecteur.session_active(), "un résultat d'outil ne déclenche pas"
-    )
-
-    ajouter({"type": "user", "message": {"content": "<task-notification>\n<task-id>x</task-id>"}})
-    _verifier(
-        not detecteur.session_active(),
-        "une ligne injectée par le système ne déclenche pas",
-    )
-
-    ajouter({"type": "user", "message": {"content": "explique-moi cette fonction"}})
-    _verifier(detecteur.session_active(), "un prompt de l'utilisateur déclenche")
-    _verifier(
-        not detecteur.session_active(), "le même prompt ne déclenche qu'une fois"
-    )
-
-    ajouter({"type": "user", "message": {"content": [{"type": "text", "text": "et un autre"}]}})
-    _verifier(
-        detecteur.session_active(), "le prompt suivant déclenche à nouveau"
-    )
-    _verifier(
-        detecteur.projet_actif() == Path("/Users/untel/Documents/Essai"),
-        "le projet est lu dans le transcript",
-    )
-
-
 def verifier_lecture_historique() -> None:
     """Contrôles sans interface, sur la tolérance de l'historique aux lignes invalides.
 
@@ -355,7 +290,6 @@ def main() -> int:
     verifier_extraction()
     verifier_statistiques()
     verifier_lecture_historique()
-    verifier_detection()
 
     application = QApplication(sys.argv)
     _mode_barre_de_menus()
@@ -366,7 +300,6 @@ def main() -> int:
     orchestrateur = construire(application, factice=True)
     panneau = orchestrateur._panneau
     barre = orchestrateur._barre
-    detecteur = orchestrateur._detecteur
 
     def _historique() -> list:
         journal = os.path.join(DOSSIER_TEST, "historique.json")
@@ -375,52 +308,24 @@ def main() -> int:
         with open(journal, encoding="utf-8") as fichier:
             return json.load(fichier).get("entrees", [])
 
-    def _reglages() -> dict:
-        fichier = os.path.join(DOSSIER_TEST, "reglages.json")
-        if not os.path.exists(fichier):
-            return {}
-        with open(fichier, encoding="utf-8") as ouvert:
-            return json.load(ouvert)
-
     def demarrage() -> None:
         _verifier(orchestrateur.etat() is Etat.FERME, "au démarrage, le panneau est fermé")
         _verifier(not panneau.isVisible(), "rien ne s'affiche au lancement")
         _verifier(barre.isVisible(), "l'icône de la barre de menus est en place")
-        _verifier(orchestrateur.est_actif(), "la détection démarre à l'écoute")
-        _verifier(
-            "écoute" in barre.toolTip(), "l'infobulle annonce l'état à l'écoute"
-        )
-        detecteur.demander_question()
-
-    def apres_detection() -> None:
-        _verifier(
-            orchestrateur.question_en_attente(),
-            "une détection met une question en attente",
-        )
-        _verifier(
-            orchestrateur.etat() is Etat.FERME,
-            "la détection prévient sans ouvrir le panneau",
-        )
-        _verifier(not panneau.isVisible(), "la notification n'ouvre rien à l'écran")
-        _verifier(
-            "attend" in barre.toolTip(),
-            "l'icône signale elle aussi la question en attente",
-        )
         orchestrateur.ouvrir()
+
+    def repos_initial() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.REPOS,
+            "un clic sur l'icône ouvre le panneau au repos",
+        )
+        _verifier(panneau.isVisible(), "le panneau est visible")
+        panneau.question_demandee.emit()
 
     def question() -> None:
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "ouvrir le panneau sert la question qui attendait",
-        )
-        _verifier(panneau.isVisible(), "le panneau est visible")
-        _verifier(
-            not orchestrateur.question_en_attente(),
-            "la question en attente est consommée",
-        )
-        _verifier(
-            "attend" not in barre.toolTip(),
-            "l'icône cesse de signaler une attente",
+            "demander une question l'affiche",
         )
         _verifier(
             panneau._etiquette_fonction.text() != "",
@@ -487,71 +392,26 @@ def main() -> int:
         _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
         _verifier(not panneau.isVisible(), "le panneau a bien disparu")
         _verifier(len(_historique()) == 2, "refermer n'enregistre rien de plus")
-        panneau.activation_changee.emit(False)
-
-    def en_pause() -> None:
-        _verifier(not orchestrateur.est_actif(), "l'interrupteur met en pause")
-        _verifier("pause" in barre.toolTip(), "l'infobulle annonce la pause")
-        _verifier(
-            _reglages().get("detection_active") is False,
-            "la pause est écrite sur le disque",
-        )
-        detecteur.demander_question()
-
-    def pause_sans_effet() -> None:
-        _verifier(
-            not orchestrateur.question_en_attente(),
-            "en pause, une détection ne met rien en attente",
-        )
-        _verifier(orchestrateur.etat() is Etat.FERME, "en pause, rien ne s'ouvre")
-        orchestrateur.ouvrir()
-
-    def repos_en_pause() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.REPOS,
-            "le panneau s'ouvre quand même à la demande",
-        )
-        _verifier(
-            "pause" in panneau._message_repos.text().lower(),
-            "le panneau dit que la détection est en pause",
-        )
-        panneau.question_demandee.emit()
-
-    def question_manuelle() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.QUESTION,
-            "en pause, on peut toujours demander une question",
-        )
-        panneau.activation_changee.emit(True)
 
     def fin() -> None:
-        _verifier(orchestrateur.est_actif(), "l'interrupteur remet à l'écoute")
         _verifier(
-            _reglages().get("detection_active") is True,
-            "la reprise est écrite sur le disque",
+            orchestrateur.etat() is Etat.FERME,
+            "le panneau reste fermé jusqu'au prochain clic",
         )
         application.quit()
 
-    # L'évaluation factice dort une seconde dans son fil. La marge avant le
-    # contrôle du retour est large exprès : sur une machine chargée, une marge
-    # serrée fait échouer la vérification au hasard, et une vérification qui
-    # ment de temps en temps ne vaut pas mieux que pas de vérification.
     for delai, etape in (
         (600, demarrage),
-        (1700, apres_detection),
-        (2000, question),
-        (2300, evaluation),
-        (4200, retour),
-        (4500, repos),
-        (4700, tableau),
-        (4900, apres_tableau),
-        (5100, apres_passage),
-        (5400, ferme),
-        (5700, en_pause),
-        (6900, pause_sans_effet),
-        (7200, repos_en_pause),
-        (7500, question_manuelle),
-        (7800, fin),
+        (900, repos_initial),
+        (1200, question),
+        (1500, evaluation),
+        (3400, retour),
+        (3700, repos),
+        (3900, tableau),
+        (4100, apres_tableau),
+        (4300, apres_passage),
+        (4600, ferme),
+        (4900, fin),
     ):
         QTimer.singleShot(delai, etape)
 

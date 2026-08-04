@@ -30,7 +30,6 @@ from qfluentwidgets import (
     SegmentedWidget,
     SmoothScrollArea,
     StrongBodyLabel,
-    SwitchButton,
     TextEdit,
     TransparentToolButton,
 )
@@ -102,7 +101,6 @@ class Panneau(QWidget):
     question_demandee = pyqtSignal()
     tableau_demande = pyqtSignal()
     fermeture_demandee = pyqtSignal()
-    activation_changee = pyqtSignal(bool)
     sortie_demandee = pyqtSignal()
     masque = pyqtSignal()
 
@@ -341,11 +339,6 @@ class Panneau(QWidget):
         ligne.setContentsMargins(0, 6, 0, 0)
         ligne.setSpacing(8)
 
-        self._interrupteur = SwitchButton(pied)
-        self._interrupteur.setOnText("Détection active")
-        self._interrupteur.setOffText("Détection en pause")
-        self._interrupteur.checkedChanged.connect(self.activation_changee.emit)
-        ligne.addWidget(self._interrupteur)
         ligne.addStretch(1)
 
         quitter = TransparentToolButton(FluentIcon.POWER_BUTTON, pied)
@@ -468,12 +461,6 @@ class Panneau(QWidget):
         self._definir_section_active(_SECTION_TABLEAU)
 
         self._afficher(LARGEUR, HAUTEUR_TABLEAU)
-
-    def definir_actif(self, actif: bool) -> None:
-        """Met l'interrupteur à jour sans relancer le signal."""
-        self._interrupteur.blockSignals(True)
-        self._interrupteur.setChecked(actif)
-        self._interrupteur.blockSignals(False)
 
     def _definir_section_active(self, section: str) -> None:
         """Aligne la navigation sur la section affichée, sans relancer le signal.
