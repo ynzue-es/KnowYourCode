@@ -29,5 +29,8 @@ dependencies = [
 [project.scripts]
 knowyourcode = "connais_ton_code.application:lancer"
 
+[project.urls]
+Source = "https://github.com/ynzue-es/KnowYourCode"
+
 [tool.setuptools]
 packages = ["connais_ton_code"]
