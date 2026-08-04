@@ -183,53 +183,53 @@ export default async function Accueil() {
         <Section
           id="surfaces"
           surtitre="Les deux surfaces"
-          titre="Une icône, un panneau, deux sections"
+          titre="Un panneau pour répondre, une fenêtre pour prendre du recul"
           chapeau={
             <p>
-              L&apos;application n&apos;apparaît pas dans le Dock. Sa seule
-              présence permanente est une icône dans la barre de menus, en haut
-              à droite. Un clic ouvre le panneau, sous l&apos;icône : la
-              question, la réponse, le verdict, la progression,
-              l&apos;interrupteur du rappel et le bouton pour quitter. Un
-              sélecteur en haut choisit entre ses deux sections.
+              L&apos;application n&apos;apparaît pas dans le Dock, et rien ne
+              s&apos;ouvre au lancement : elle pose son icône dans la barre de
+              menus, en haut à droite, et attend.
             </p>
           }
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <Carte titre="Question">
+            <Carte titre="Le panneau">
               <p>
-                Le chemin du fichier, le nom de la fonction, le code coloré,
-                une zone de saisie. Vous répondez avec Cmd+Entrée, ou vous
-                passez.
+                Sous l&apos;icône, il ne contient que l&apos;exercice : le
+                chemin du fichier, le nom de la fonction, le code coloré, une
+                zone de saisie, le verdict. On y répond en trente secondes et
+                on retourne travailler.
               </p>
               <p>
+                Vous répondez avec Cmd+Entrée, ou vous passez.
                 L&apos;évaluation part hors du fil de l&apos;interface : le
-                panneau reste utilisable pendant l&apos;attente. Elle revient
-                sous la forme d&apos;un verdict, d&apos;une note, et de la
-                liste de ce que vous n&apos;avez pas mentionné.
+                panneau reste utilisable pendant l&apos;attente.
               </p>
             </Carte>
 
-            <Carte titre="Progression">
+            <Carte titre="La grande fenêtre">
               <p>
-                Le nombre de réponses, le score moyen et le score récent, la
-                courbe des vingt derniers scores, ce qui revient le plus
-                souvent dans les oublis, les fonctions les moins bien
-                expliquées, la répartition par langage.
+                Au centre de l&apos;écran, une fenêtre ordinaire avec sa barre
+                latérale, elle porte ce qu&apos;on consulte en s&apos;arrêtant :
+                la progression et les réglages. Elle s&apos;ouvre par
+                l&apos;icône en bas à gauche du panneau, et se ferme d&apos;un
+                Esc.
               </p>
               <p>
-                Tant qu&apos;aucune réponse n&apos;a été donnée, la section dit
-                simplement qu&apos;il n&apos;y a encore rien à montrer, plutôt
-                que d&apos;afficher des zéros qui ne diraient rien.
+                La progression montre le nombre de réponses, le score moyen et
+                le score récent, la courbe des vingt derniers scores, ce qui
+                revient le plus souvent dans les oublis, les fonctions les
+                moins bien expliquées et la répartition par langage.
               </p>
             </Carte>
           </div>
 
           <p className="text-discret mt-6 text-sm leading-relaxed">
-            Le passage d&apos;une section à l&apos;autre n&apos;est permis que
-            lorsque rien n&apos;est en train de s&apos;écrire : une réponse en
-            cours de saisie ne doit pas être interrompue par la consultation de
-            statistiques.
+            La grande fenêtre ne touche pas au cycle de l&apos;exercice : on
+            peut la consulter pendant qu&apos;une question attend sa réponse.
+            Tant que rien n&apos;a été répondu, la progression dit simplement
+            qu&apos;il n&apos;y a encore rien à montrer, plutôt que
+            d&apos;afficher des zéros qui ne diraient rien.
           </p>
         </Section>
 
@@ -250,14 +250,15 @@ export default async function Accueil() {
           <BlocCode intitule="Terminal">
             <span className="text-accent">✳</span>{" "}
             <span className="text-encre">
-              {"<kyc>Révise pendant que je travaille</kyc>"}
+              {"<kyc>🧠 Révise pendant que je travaille</kyc>"}
             </span>
             <Note>… (12s · esc to interrupt)</Note>
           </BlocCode>
 
           <div className="text-attenue mt-6 space-y-4 text-[0.95rem] leading-relaxed">
             <p>
-              L&apos;interrupteur en bas du panneau écrit un bloc{" "}
+              L&apos;interrupteur des réglages, dans la grande fenêtre, écrit
+              un bloc{" "}
               <Mono>spinnerVerbs</Mono> dans{" "}
               <Mono>~/.claude/settings.json</Mono>, avec une quinzaine de
               phrases. L&apos;éteindre retire le bloc et rend à Claude Code ses
