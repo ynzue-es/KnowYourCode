@@ -43,7 +43,10 @@ python verifier.py
 
 Le script déroule tout seul un cycle complet et contrôle, à chaque étape, que
 l'application ne passe jamais au premier plan et que rien ne capte le clavier.
-Il rend un code de sortie non nul en cas d'échec.
+Sa dernière étape prend délibérément le focus une seconde, pour vérifier
+l'autre moitié de la promesse : qu'un clic dans la fenêtre permet bien de
+taper sa réponse, et qu'Esc rend ensuite le clavier. Le script rend un code de
+sortie non nul en cas d'échec.
 
 ## Le cycle
 

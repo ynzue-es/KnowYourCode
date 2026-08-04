@@ -25,9 +25,8 @@ import os
 import sys
 
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QWidget
-
-_MACOS = sys.platform == "darwin"
 
 # Délai avant de rendre le focus à l'application précédente : Qt active la
 # nôtre pendant le tour de boucle qui suit l'affichage, pas pendant l'appel.
@@ -39,9 +38,22 @@ _DELAI_RESTITUTION_MS = 50
 _application_externe = None
 
 
+def _sur_cocoa() -> bool:
+    """Vrai seulement si Qt dessine vraiment à travers Cocoa.
+
+    Le nom de plateforme compte autant que le système : avec le greffon
+    `offscreen`, utilisé pour les tests, `winId()` ne désigne pas une NSView
+    et la passer à pyobjc fait tomber le processus.
+    """
+    return (
+        sys.platform == "darwin"
+        and QGuiApplication.platformName().lower() == "cocoa"
+    )
+
+
 def _fenetre_native(widget: QWidget):
-    """Rend le NSWindow derrière le widget, ou None hors macOS."""
-    if not _MACOS:
+    """Rend le NSWindow derrière le widget, ou None si Cocoa n'est pas là."""
+    if not _sur_cocoa():
         return None
     try:
         import objc
@@ -92,7 +104,7 @@ def amorcer(widget: QWidget, montrer_ensuite: bool = False) -> None:
     du focus à l'application qui l'avait. Après ça, plus rien ne repasse par
     Qt pour afficher.
     """
-    if not _MACOS:
+    if not _sur_cocoa():
         if montrer_ensuite:
             widget.show()
         return

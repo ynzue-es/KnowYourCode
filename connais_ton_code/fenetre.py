@@ -72,7 +72,6 @@ class FenetreFlottante(QWidget):
         self.resize(LARGEUR + 2 * MARGE_OMBRE, HAUTEUR + 2 * MARGE_OMBRE)
 
         self._origine_glissement: QPoint | None = None
-        self._extrait_affiche: Extrait | None = None
 
         self._construire()
         self._brancher_raccourcis()
@@ -246,7 +245,10 @@ class FenetreFlottante(QWidget):
         return page
 
     def _brancher_raccourcis(self) -> None:
-        # Sur macOS, Qt fait déjà correspondre Ctrl à la touche Cmd.
+        # Sur macOS, Qt fait déjà correspondre Ctrl à la touche Cmd. Le
+        # raccourci ne vaut que quand la fenêtre a le clavier, c'est-à-dire
+        # après un clic dedans : tant qu'elle flotte sans focus, il n'y a de
+        # toute façon aucune frappe à recevoir.
         for sequence in ("Ctrl+Return", "Ctrl+Enter"):
             raccourci = QShortcut(QKeySequence(sequence), self)
             raccourci.setContext(Qt.ShortcutContext.WindowShortcut)
@@ -258,7 +260,6 @@ class FenetreFlottante(QWidget):
 
     def afficher_question(self, extrait: Extrait) -> None:
         """Passe en état Question avec un nouvel extrait."""
-        self._extrait_affiche = extrait
         self._etiquette_etat.setText("question")
         self._etiquette_fichier.setText(extrait.chemin_fichier)
         self._etiquette_fonction.setText(extrait.nom_fonction)

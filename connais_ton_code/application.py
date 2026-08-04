@@ -5,7 +5,7 @@ from __future__ import annotations
 import signal
 import sys
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QThreadPool, QTimer
 from PyQt6.QtWidgets import QApplication
 
 from .affichage import amorcer
@@ -99,4 +99,17 @@ def lancer() -> int:
     _autoriser_ctrl_c(application)
 
     construire(application)
-    return application.exec()
+    code = application.exec()
+    attendre_les_evaluations()
+    return code
+
+
+def attendre_les_evaluations(delai_ms: int = 3000) -> None:
+    """Laisse les évaluations en cours se terminer avant de démonter Qt.
+
+    Une évaluation abandonnée continue de tourner dans son fil : si Qt est
+    démonté avant qu'elle rende son résultat, elle l'émet sur des objets qui
+    n'existent plus et la sortie du programme se termine par une trace
+    d'erreur sans intérêt.
+    """
+    QThreadPool.globalInstance().waitForDone(delai_ms)

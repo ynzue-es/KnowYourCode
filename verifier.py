@@ -24,13 +24,15 @@ import tempfile
 DOSSIER_TEST = tempfile.mkdtemp(prefix="knowyourcode-verif-")
 os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 
-from PyQt6.QtCore import QTimer  # noqa: E402
+from PyQt6.QtCore import Qt, QTimer  # noqa: E402
+from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from connais_ton_code.affichage import est_a_l_ecran  # noqa: E402
 from connais_ton_code.application import (  # noqa: E402
     _autoriser_ctrl_c,
     _passer_en_application_accessoire,
+    attendre_les_evaluations,
     construire,
 )
 from connais_ton_code.etats import Etat  # noqa: E402
@@ -162,22 +164,102 @@ def main() -> int:
             "l'évaluation ne prend pas le focus",
         )
 
-    def retour() -> None:
-        _verifier(orchestrateur.etat() is Etat.RETOUR, "l'évaluation aboutit à l'état Retour")
+    def _entrees_historique() -> list:
         journal = os.path.join(DOSSIER_TEST, "historique.json")
-        entrees = []
-        if os.path.exists(journal):
-            with open(journal, encoding="utf-8") as fichier:
-                entrees = json.load(fichier).get("entrees", [])
-        _verifier(len(entrees) == 1, "la réponse est enregistrée dans l'historique")
+        if not os.path.exists(journal):
+            return []
+        with open(journal, encoding="utf-8") as fichier:
+            return json.load(fichier).get("entrees", [])
+
+    def retour() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.RETOUR,
+            "l'évaluation aboutit à l'état Retour",
+        )
+        _verifier(
+            len(_entrees_historique()) == 1,
+            "la réponse est enregistrée dans l'historique",
+        )
         fenetre._bouton_suivant.click()
 
-    def fin() -> None:
-        _verifier(orchestrateur.etat() is Etat.MASQUEE, "Suivant ramène à l'état Masquée")
+    def suite() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.MASQUEE, "Suivant ramène à l'état Masquée"
+        )
         _verifier(not est_a_l_ecran(fenetre), "la fenêtre est retirée de l'écran")
+        pastille.question_demandee.emit()
+
+    def echappement() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION,
+            "une deuxième question s'ouvre sur un autre extrait",
+        )
+        QTest.keyClick(fenetre._zone_reponse, Qt.Key.Key_Escape)
+
+    def apres_echappement() -> None:
+        _verifier(orchestrateur.etat() is Etat.MASQUEE, "Esc masque la fenêtre")
+        _verifier(not est_a_l_ecran(fenetre), "Esc retire la fenêtre de l'écran")
+        _verifier(
+            len(_entrees_historique()) == 1,
+            "Esc n'enregistre rien dans l'historique",
+        )
         _verifier(
             _nous_sommes_au_premier_plan() is not True,
-            "à aucun moment l'application n'a pris le premier plan",
+            "jusqu'ici l'application n'a jamais pris le premier plan",
+        )
+        print("La dernière étape prend volontairement le focus une seconde,")
+        print("pour vérifier qu'un clic permet bien de répondre au clavier.")
+        pastille.question_demandee.emit()
+
+    def clic_simule() -> None:
+        """Reproduit le clic de l'utilisateur dans la fenêtre."""
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION,
+            "une troisième question s'ouvre pour l'essai au clavier",
+        )
+        try:
+            from AppKit import NSApplication
+        except ImportError:
+            return
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        panneau = _panneau_natif(fenetre)
+        if panneau is not None:
+            panneau.makeKeyWindow()
+        fenetre._zone_reponse.setFocus()
+
+    def raccourci() -> None:
+        _verifier(_a_le_clavier(fenetre), "après le clic, la fenêtre a le clavier")
+        _verifier(
+            QApplication.focusWidget() is fenetre._zone_reponse,
+            "le curseur est dans la zone de réponse",
+        )
+        fenetre._zone_reponse.setPlainText("Réponse envoyée au clavier.")
+        # Sur macOS, Qt fait correspondre ControlModifier à la touche Cmd.
+        QTest.keyClick(
+            fenetre._zone_reponse,
+            Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+
+    def fin() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.EVALUATION,
+            "Cmd+Entrée envoie la réponse",
+        )
+        fenetre.masquage_demande.emit()
+
+    def restitution() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.MASQUEE,
+            "Esc interrompt l'évaluation en cours",
+        )
+        _verifier(
+            len(_entrees_historique()) == 1,
+            "une évaluation interrompue ne laisse pas de trace",
+        )
+        _verifier(
+            _nous_sommes_au_premier_plan() is not True,
+            "en se masquant, la fenêtre rend le clavier à l'application d'avant",
         )
         application.quit()
 
@@ -186,11 +268,18 @@ def main() -> int:
         (1700, question),
         (2000, evaluation),
         (3300, retour),
-        (3700, fin),
+        (3700, suite),
+        (4900, echappement),
+        (5300, apres_echappement),
+        (6600, clic_simule),
+        (7100, raccourci),
+        (7400, fin),
+        (7900, restitution),
     ):
         QTimer.singleShot(delai, etape)
 
     application.exec()
+    attendre_les_evaluations()
 
     for ok, description in _constats:
         print(f"{'  ok  ' if ok else 'ÉCHEC '} {description}")
