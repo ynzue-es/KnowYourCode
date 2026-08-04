@@ -1,6 +1,23 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+
+import { Ambiance } from "@/components/Ambiance";
 
 import "./globals.css";
+
+/** Inter pour le texte, JetBrains Mono pour le code. Les deux sont exposées
+ *  en variables CSS, que `globals.css` place en tête des piles de polices. */
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--police-sans",
+  display: "swap",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--police-mono",
+  display: "swap",
+});
 
 const TITRE = "KnowYourCode — connaître son code plutôt que son client";
 const DESCRIPTION =
@@ -53,8 +70,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+    <html
+      lang="fr"
+      className={`${inter.variable} ${jetbrains.variable} h-full antialiased`}
+    >
+      <body className="relative flex min-h-full flex-col">
+        <Ambiance />
+        {children}
+      </body>
     </html>
   );
 }

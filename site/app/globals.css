@@ -13,24 +13,38 @@
   --color-attenue: #9298a2;
   --color-discret: #767c86;
   --color-accent: #8ab4f8;
+  --color-menthe: #6ee7a8;
+  --color-ambre: #e0af68;
+
+  /* Les teintes de la coloration syntaxique. Elles ne servent qu'aux blocs de
+     code : les garder à part évite de les confondre avec les couleurs de
+     l'interface, qui obéissent à d'autres contraintes de contraste. */
+  --color-syntaxe-cle: #c792ea;
+  --color-syntaxe-chaine: #9ece6a;
+  --color-syntaxe-note: #5c6370;
+  --color-syntaxe-nombre: #ff9e64;
+  --color-syntaxe-appel: #8ab4f8;
+  --color-syntaxe-type: #7dcfff;
+  --color-syntaxe-signe: #6b7280;
 
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+    var(--police-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+    var(--police-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+
+  /* Les durées de l'animation vedette, partagées entre la feuille de style et
+     le composant qui l'orchestre. */
+  --duree-frappe: 22ms;
 }
 
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+  /* L'entête est collante : sans cette marge, une ancre pose son titre juste
+     dessous, à moitié caché. */
+  scroll-padding-top: 5rem;
 }
 
 body {
@@ -39,6 +53,9 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Les halos débordent volontiers : on borne la page plutôt que de les
+     rogner un par un. */
+  overflow-x: hidden;
 }
 
 ::selection {
@@ -48,4 +65,189 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------ Fonds */
+
+/**
+ * La grille de fond. Deux dégradés répétés dessinent les lignes, un masque
+ * radial les fait disparaître vers les bords : sans lui, la trame court
+ * jusqu'au ras de l'écran et fait cheap.
+ */
+.grille {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--color-bordure-vive) 55%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-bordure-vive) 55%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 30%, transparent 75%);
+}
+
+/** Un halo diffus. La couleur et la position sont posées à l'usage. */
+.halo {
+  filter: blur(90px);
+  will-change: transform;
+}
+
+/* --------------------------------------------------------------- Bordures */
+
+/**
+ * Une bordure qui s'éclaire là où passe le pointeur. Les deux variables sont
+ * écrites en JavaScript à chaque déplacement ; sans pointeur, elles valent
+ * -100% et le halo reste hors du cadre.
+ */
+.bordure-suiveuse::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    220px circle at var(--pointeur-x, -100%) var(--pointeur-y, -100%),
+    color-mix(in srgb, var(--color-accent) 55%, transparent),
+    transparent 70%
+  );
+  /* Ne garder que le liseré : le masque évide l'intérieur du dégradé. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 260ms ease;
+  pointer-events: none;
+}
+
+.bordure-suiveuse:hover::before {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------ Animations */
+
+@keyframes derive {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -6%, 0) scale(1.12);
+  }
+}
+
+@keyframes pulsation {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes curseur {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/** La lueur qui traverse une barre de séparation, de gauche à droite. */
+@keyframes balayage {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/** L'apparition d'une ligne de code, poussée depuis le bas. */
+@keyframes montee {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.anime-derive {
+  animation: derive 18s ease-in-out infinite;
+}
+
+.anime-pulsation {
+  animation: pulsation 4s ease-in-out infinite;
+}
+
+.anime-curseur {
+  animation: curseur 1.1s steps(1) infinite;
+}
+
+.anime-balayage {
+  animation: balayage 3.5s ease-in-out infinite;
+}
+
+.anime-montee {
+  animation: montee 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/**
+ * L'état d'un élément que l'observateur d'intersection n'a pas encore vu
+ * passer. `.vu` est posé à l'entrée dans le cadre — voir `Revelation`.
+ */
+.a-reveler {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--retard, 0ms);
+}
+
+.a-reveler.vu {
+  opacity: 1;
+  transform: none;
+}
+
+/* --------------------------------------------------- Mouvement en moins */
+
+/**
+ * Tout ce qui bouge s'arrête ici. Les éléments à révéler doivent en plus
+ * être rendus visibles : leur état de départ est une opacité nulle, et sans
+ * l'animation qui la lève ils resteraient invisibles pour de bon.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .a-reveler {
+    opacity: 1;
+    transform: none;
+  }
 }

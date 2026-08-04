@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { Revelation } from "@/components/Revelation";
+
 type ProprietesSection = {
   /** L'ancre, reprise par les liens de l'entête. */
   id: string;
@@ -13,7 +15,8 @@ type ProprietesSection = {
 
 /**
  * Une section de la page : même rythme vertical, même largeur de colonne,
- * même hiérarchie de titres partout.
+ * même hiérarchie de titres partout. L'entête et le contenu montent l'un
+ * après l'autre à l'entrée dans le cadre.
  */
 export function Section({
   id,
@@ -26,46 +29,44 @@ export function Section({
     <section
       id={id}
       aria-labelledby={`${id}-titre`}
-      className="border-t border-bordure/70 px-6 py-20 sm:py-24"
+      className="border-bordure/60 relative border-t px-6 py-24 sm:py-32"
     >
-      <div className="mx-auto w-full max-w-4xl">
-        <header className="max-w-2xl">
-          {surtitre ? (
-            <p className="mb-3 font-mono text-xs tracking-[0.18em] text-discret uppercase">
-              {surtitre}
-            </p>
-          ) : null}
-          <h2
-            id={`${id}-titre`}
-            className="text-2xl font-semibold tracking-tight text-encre sm:text-3xl"
-          >
-            {titre}
-          </h2>
-          {chapeau ? (
-            <div className="mt-5 space-y-4 text-base leading-relaxed text-attenue sm:text-lg">
-              {chapeau}
-            </div>
-          ) : null}
-        </header>
-        {children ? <div className="mt-10">{children}</div> : null}
+      {/* Le trait du haut n'est pas uniforme : il s'éteint vers les bords, ce
+          qui évite la rayure d'un bout à l'autre de l'écran. */}
+      <div
+        aria-hidden="true"
+        className="via-bordure-vive absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent"
+      />
+
+      <div className="mx-auto w-full max-w-5xl">
+        <Revelation className="max-w-2xl">
+          <header>
+            {surtitre ? (
+              <p className="text-accent/80 mb-4 flex items-center gap-3 font-mono text-xs tracking-[0.2em] uppercase">
+                <span aria-hidden="true" className="bg-accent/40 h-px w-6" />
+                {surtitre}
+              </p>
+            ) : null}
+            <h2
+              id={`${id}-titre`}
+              className="text-encre text-2xl font-semibold tracking-tight text-balance sm:text-4xl"
+            >
+              {titre}
+            </h2>
+            {chapeau ? (
+              <div className="text-attenue mt-5 space-y-4 text-base leading-relaxed sm:text-lg">
+                {chapeau}
+              </div>
+            ) : null}
+          </header>
+        </Revelation>
+
+        {children ? (
+          <Revelation retard={120} className="mt-12">
+            {children}
+          </Revelation>
+        ) : null}
       </div>
     </section>
-  );
-}
-
-type ProprietesCarte = {
-  titre: string;
-  children: ReactNode;
-};
-
-/** Un bloc encadré, du même gris que le panneau de l'application. */
-export function Carte({ titre, children }: ProprietesCarte) {
-  return (
-    <article className="rounded-2xl border border-bordure bg-panneau p-6 sm:p-7">
-      <h3 className="text-base font-semibold text-encre">{titre}</h3>
-      <div className="mt-3 space-y-3 text-[0.95rem] leading-relaxed text-attenue">
-        {children}
-      </div>
-    </article>
   );
 }

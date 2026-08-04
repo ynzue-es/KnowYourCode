@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
 
-import { BlocCode, Commande, Note } from "@/components/BlocCode";
+import { BlocCode, Commande } from "@/components/BlocCode";
+import { Carte } from "@/components/Carte";
+import { DemoExercice } from "@/components/DemoExercice";
+import { Entete } from "@/components/Entete";
+import { LigneSpinner } from "@/components/LigneSpinner";
 import { Logo } from "@/components/Logo";
-import { Carte, Section } from "@/components/Section";
+import { Revelation } from "@/components/Revelation";
+import { Section } from "@/components/Section";
 import {
   dateEnFrancais,
   dernierePublication,
@@ -18,13 +23,6 @@ export const revalidate = 300;
 
 const LIEN_TELECHARGEMENT = "/api/telecharger";
 
-const NAVIGATION = [
-  { href: "#principe", intitule: "Le principe" },
-  { href: "#rappel", intitule: "Le rappel" },
-  { href: "#fonctionnement", intitule: "Fonctionnement" },
-  { href: "#installation", intitule: "Installation" },
-];
-
 export default async function Accueil() {
   const publication = await dernierePublication();
   const publieeLe = dateEnFrancais(publication?.publieeLe ?? null);
@@ -39,107 +37,83 @@ export default async function Accueil() {
 
   return (
     <>
-      <header className="border-bordure/70 bg-fond/85 sticky top-0 z-20 border-b backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-4xl items-center justify-between gap-6 px-6">
-          <a
-            href="#haut"
-            className="flex shrink-0 items-center gap-2.5 rounded-md"
-          >
-            <Logo taille={24} className="rounded-[7px]" />
-            <span className="text-encre text-sm font-semibold tracking-tight">
-              KnowYourCode
-            </span>
-          </a>
-
-          <nav aria-label="Sections de la page" className="hidden md:block">
-            <ul className="flex items-center gap-7 text-sm">
-              {NAVIGATION.map((lien) => (
-                <li key={lien.href}>
-                  <a
-                    href={lien.href}
-                    className="text-attenue hover:text-encre rounded-md transition-colors"
-                  >
-                    {lien.intitule}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <a
-            href={LIEN_TELECHARGEMENT}
-            className="bg-encre hover:bg-encre/90 shrink-0 rounded-full px-4 py-1.5 text-sm font-medium text-[#0b0c0e] transition-colors"
-          >
-            Télécharger
-          </a>
-        </div>
-      </header>
+      <Entete lienTelechargement={LIEN_TELECHARGEMENT} />
 
       <main id="haut" className="flex-1">
         {/* --------------------------------------------------------- Hero */}
-        <div className="px-6 pt-20 pb-20 sm:pt-28 sm:pb-28">
-          <div className="mx-auto w-full max-w-4xl">
-            <Logo taille={72} className="rounded-[20px]" />
+        <div className="px-6 pt-16 pb-24 sm:pt-24 sm:pb-32">
+          <div className="mx-auto grid w-full max-w-5xl items-center gap-14 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-12">
+            <Revelation>
+              <span className="border-bordure-vive bg-panneau/60 text-attenue inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-xs backdrop-blur">
+                <span
+                  aria-hidden="true"
+                  className="bg-menthe anime-pulsation h-1.5 w-1.5 rounded-full"
+                />
+                Barre de menus · macOS
+              </span>
 
-            <h1 className="text-encre mt-8 text-4xl font-semibold tracking-tight sm:text-5xl">
-              KnowYourCode
-            </h1>
+              <h1 className="text-encre mt-6 text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
+                Connaître son code
+                <span className="text-attenue block">
+                  plutôt que son client.
+                </span>
+              </h1>
 
-            <p className="text-attenue mt-4 max-w-2xl text-lg sm:text-xl">
-              Clin d&apos;œil au KYC bancaire : connaître son code plutôt que
-              son client.
-            </p>
-
-            <p className="text-attenue mt-6 max-w-2xl text-base leading-relaxed sm:text-lg">
-              Un utilitaire de barre de menus pour macOS. Quand vous avez un
-              moment, vous ouvrez son panneau : il tire au hasard une fonction
-              du projet en cours et vous demande de l&apos;expliquer. Un modèle
-              tiers compare votre explication au code et vous dit ce que vous
-              avez oublié.
-            </p>
-
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              <a
-                href={LIEN_TELECHARGEMENT}
-                className="bg-encre hover:bg-encre/90 inline-flex items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-base font-medium text-[#0b0c0e] transition-colors"
-              >
-                <IconePomme />
-                Télécharger pour macOS
-              </a>
-
-              <a
-                href={URL_DEPOT}
-                className="border-bordure-vive bg-panneau text-encre hover:border-discret inline-flex items-center justify-center gap-2.5 rounded-xl border px-6 py-3.5 text-base font-medium transition-colors"
-              >
-                <IconeGitHub />
-                Voir sur GitHub
-              </a>
-            </div>
-
-            <p className="text-discret mt-5 text-sm">{precisions}</p>
-
-            {publieeLe ? (
-              <p className="text-discret mt-1 text-sm">
-                Publiée le {publieeLe} ·{" "}
-                <a
-                  href={publication?.urlPublication ?? URL_PUBLICATIONS}
-                  className="hover:text-attenue underline underline-offset-4 transition-colors"
-                >
-                  notes de version
-                </a>
+              <p className="text-attenue mt-6 max-w-xl text-base leading-relaxed sm:text-lg">
+                Un utilitaire de barre de menus pour macOS. Quand vous avez un
+                moment, vous ouvrez son panneau : il tire au hasard une fonction
+                du projet en cours et vous demande de l&apos;expliquer. Un
+                modèle tiers compare votre explication au code et vous dit ce
+                que vous avez oublié.
               </p>
-            ) : (
-              <p className="text-discret mt-1 text-sm">
-                Le lien mène toujours à la{" "}
+
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <a
-                  href={URL_PUBLICATIONS}
-                  className="hover:text-attenue underline underline-offset-4 transition-colors"
+                  href={LIEN_TELECHARGEMENT}
+                  className="bg-encre hover:bg-encre/90 inline-flex items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-base font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_36px_-8px] hover:shadow-white/40"
                 >
-                  dernière version publiée
+                  <IconePomme />
+                  Télécharger pour macOS
                 </a>
-                .
-              </p>
-            )}
+
+                <a
+                  href={URL_DEPOT}
+                  className="border-bordure-vive bg-panneau/60 text-encre hover:border-discret hover:bg-panneau inline-flex items-center justify-center gap-2.5 rounded-xl border px-6 py-3.5 text-base font-medium backdrop-blur transition-colors"
+                >
+                  <IconeGitHub />
+                  Voir sur GitHub
+                </a>
+              </div>
+
+              <p className="text-discret mt-6 font-mono text-xs">{precisions}</p>
+
+              {publieeLe ? (
+                <p className="text-discret mt-1.5 font-mono text-xs">
+                  Publiée le {publieeLe} ·{" "}
+                  <a
+                    href={publication?.urlPublication ?? URL_PUBLICATIONS}
+                    className="hover:text-attenue underline underline-offset-4 transition-colors"
+                  >
+                    notes de version
+                  </a>
+                </p>
+              ) : (
+                <p className="text-discret mt-1.5 font-mono text-xs">
+                  Le lien mène toujours à la{" "}
+                  <a
+                    href={URL_PUBLICATIONS}
+                    className="hover:text-attenue underline underline-offset-4 transition-colors"
+                  >
+                    dernière version publiée
+                  </a>
+                  .
+                </p>
+              )}
+            </Revelation>
+
+            <Revelation retard={160}>
+              <DemoExercice />
+            </Revelation>
           </div>
         </div>
 
@@ -165,12 +139,16 @@ export default async function Accueil() {
             </>
           }
         >
-          <figure className="border-bordure bg-panneau rounded-2xl border p-6 sm:p-8">
-            <blockquote className="text-encre text-xl leading-snug font-medium sm:text-2xl">
+          <figure className="border-bordure bg-panneau/60 relative overflow-hidden rounded-2xl border p-8 backdrop-blur-sm sm:p-10">
+            <div
+              aria-hidden="true"
+              className="bg-accent/40 absolute inset-y-8 left-0 w-px"
+            />
+            <blockquote className="text-encre text-xl leading-snug font-medium text-balance sm:text-2xl">
               « Rien ne s&apos;ouvre tout seul, jamais. C&apos;est vous qui
               décidez du moment. »
             </blockquote>
-            <figcaption className="text-attenue mt-4 text-[0.95rem] leading-relaxed">
+            <figcaption className="text-attenue mt-4 max-w-2xl text-[0.95rem] leading-relaxed">
               Pas de notification à l&apos;heure dite, pas de fenêtre qui
               surgit au milieu d&apos;une phrase. L&apos;icône attend dans la
               barre de menus. Vous cliquez quand vous avez deux minutes, et
@@ -193,7 +171,7 @@ export default async function Accueil() {
           }
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <Carte titre="Le panneau">
+            <Carte titre="Le panneau" marque="01">
               <p>
                 Sous l&apos;icône, il ne contient que l&apos;exercice : le
                 chemin du fichier, le nom de la fonction, le code coloré, une
@@ -207,7 +185,7 @@ export default async function Accueil() {
               </p>
             </Carte>
 
-            <Carte titre="La grande fenêtre">
+            <Carte titre="La grande fenêtre" marque="02">
               <p>
                 Au centre de l&apos;écran, une fenêtre ordinaire avec sa barre
                 latérale, elle porte ce qu&apos;on consulte en s&apos;arrêtant :
@@ -224,7 +202,7 @@ export default async function Accueil() {
             </Carte>
           </div>
 
-          <p className="text-discret mt-6 text-sm leading-relaxed">
+          <p className="text-discret mt-6 max-w-3xl text-sm leading-relaxed">
             La grande fenêtre ne touche pas au cycle de l&apos;exercice : on
             peut la consulter pendant qu&apos;une question attend sa réponse.
             Tant que rien n&apos;a été répondu, la progression dit simplement
@@ -247,19 +225,12 @@ export default async function Accueil() {
             </p>
           }
         >
-          <BlocCode intitule="Terminal">
-            <span className="text-accent">✳</span>{" "}
-            <span className="text-encre">
-              {"<kyc>🧠 Révise pendant que je travaille</kyc>"}
-            </span>
-            <Note>… (12s · esc to interrupt)</Note>
-          </BlocCode>
+          <LigneSpinner />
 
-          <div className="text-attenue mt-6 space-y-4 text-[0.95rem] leading-relaxed">
+          <div className="text-attenue mt-8 grid gap-8 text-[0.95rem] leading-relaxed lg:grid-cols-2">
             <p>
               L&apos;interrupteur des réglages, dans la grande fenêtre, écrit
-              un bloc{" "}
-              <Mono>spinnerVerbs</Mono> dans{" "}
+              un bloc <Mono>spinnerVerbs</Mono> dans{" "}
               <Mono>~/.claude/settings.json</Mono>, avec une quinzaine de
               phrases. L&apos;éteindre retire le bloc et rend à Claude Code ses
               propres verbes. Dans les deux sens, le reste du fichier est
@@ -275,9 +246,17 @@ export default async function Accueil() {
             </p>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-6">
             <BlocCode intitule="~/.knowyourcode/phrases.json">
-              {'["Relis avant de valider", "Tu saurais réécrire ça sans moi ?"]'}
+              <span className="text-[var(--color-syntaxe-signe)]">[</span>
+              <span className="text-[var(--color-syntaxe-chaine)]">
+                &quot;Relis avant de valider&quot;
+              </span>
+              <span className="text-[var(--color-syntaxe-signe)]">, </span>
+              <span className="text-[var(--color-syntaxe-chaine)]">
+                &quot;Tu saurais réécrire ça sans moi ?&quot;
+              </span>
+              <span className="text-[var(--color-syntaxe-signe)]">]</span>
             </BlocCode>
           </div>
         </Section>
@@ -295,7 +274,7 @@ export default async function Accueil() {
           }
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <Carte titre="Le projet en cours">
+            <Carte titre="Le projet en cours" marque="01">
               <p>
                 Il se lit dans les transcripts JSONL de Claude Code, sous{" "}
                 <Mono>~/.claude/projects/</Mono>. Le transcript modifié en
@@ -304,7 +283,7 @@ export default async function Accueil() {
               </p>
             </Carte>
 
-            <Carte titre="La sélection">
+            <Carte titre="La sélection" marque="02">
               <p>
                 Une fonction de 4 à 60 lignes, tirée au hasard dans ce projet.
                 Les fonctions Python sont repérées avec <Mono>ast</Mono>, les
@@ -318,7 +297,7 @@ export default async function Accueil() {
               </p>
             </Carte>
 
-            <Carte titre="L'évaluation">
+            <Carte titre="L'évaluation" marque="03">
               <p>
                 Le code et votre explication partent chez{" "}
                 <Mono>mistral-small-latest</Mono>, qui rend un verdict, une
@@ -331,7 +310,7 @@ export default async function Accueil() {
               </p>
             </Carte>
 
-            <Carte titre="Les données locales">
+            <Carte titre="Les données locales" marque="04">
               <p>
                 Tout reste sur la machine, en clair, dans{" "}
                 <Mono>~/.knowyourcode/</Mono>. L&apos;historique garde les
@@ -351,9 +330,9 @@ export default async function Accueil() {
         <Section
           id="installation"
           surtitre="Installation"
-          titre="Quatre étapes, dont une facultative"
+          titre="Trois étapes, dont une facultative"
         >
-          <ol className="space-y-8">
+          <ol className="space-y-10">
             <Etape numero={1} titre="Glisser dans Applications">
               <p>
                 Ouvrez le DMG téléchargé et faites glisser{" "}
@@ -361,23 +340,7 @@ export default async function Accueil() {
               </p>
             </Etape>
 
-            {/* À retirer le jour où l'application est notarisée. */}
-            <Etape numero={2} titre="Autoriser la première ouverture">
-              <p>
-                Cette version n&apos;est pas notarisée par Apple. Au premier
-                double-clic, macOS annoncera que l&apos;application est
-                endommagée : elle ne l&apos;est pas, il lui manque un tampon.
-              </p>
-              <p className="mt-3">
-                Fermez le message, puis ouvrez Réglages Système →{" "}
-                <span className="text-encre">Confidentialité et sécurité</span>{" "}
-                et descendez tout en bas : un bouton{" "}
-                <span className="text-encre">« Ouvrir quand même »</span> vous
-                attend. C&apos;est à faire une seule fois.
-              </p>
-            </Etape>
-
-            <Etape numero={3} titre="Fournir une clé d'API Mistral">
+            <Etape numero={2} titre="Fournir une clé d'API Mistral">
               <p>
                 L&apos;évaluation passe par l&apos;API Mistral. Deux façons de
                 donner la clé, au choix.
@@ -403,7 +366,7 @@ export default async function Accueil() {
               </p>
             </Etape>
 
-            <Etape numero={4} titre="Ouvrir l'application">
+            <Etape numero={3} titre="Ouvrir l'application">
               <p>
                 L&apos;icône se pose dans la barre de menus, en haut à droite.
                 Rien n&apos;apparaît dans le Dock. Un clic ouvre le panneau, et
@@ -412,7 +375,7 @@ export default async function Accueil() {
             </Etape>
           </ol>
 
-          <div className="border-bordure bg-panneau text-attenue mt-10 rounded-2xl border p-6 text-[0.95rem] leading-relaxed">
+          <div className="border-bordure bg-panneau/60 text-attenue mt-12 rounded-2xl border p-6 text-[0.95rem] leading-relaxed backdrop-blur-sm sm:p-8">
             <p>
               <span className="text-encre font-medium">
                 Sans clé, l&apos;application démarre quand même
@@ -437,31 +400,39 @@ export default async function Accueil() {
         {/* --------------------------------------------------- Fin de page */}
         <section
           aria-labelledby="fin-titre"
-          className="border-bordure/70 border-t px-6 py-20 sm:py-24"
+          className="border-bordure/60 border-t px-6 py-24 sm:py-28"
         >
-          <div className="border-bordure bg-panneau mx-auto flex w-full max-w-4xl flex-col items-start gap-6 rounded-2xl border p-8 sm:flex-row sm:items-center sm:justify-between sm:p-10">
-            <div>
-              <h2
-                id="fin-titre"
-                className="text-encre text-xl font-semibold tracking-tight sm:text-2xl"
+          <Revelation className="mx-auto w-full max-w-5xl">
+            <div className="border-bordure-vive bg-panneau/70 relative flex flex-col items-start gap-6 overflow-hidden rounded-3xl border p-8 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:p-12">
+              <div
+                aria-hidden="true"
+                className="halo bg-accent absolute -top-24 -left-16 h-56 w-56 rounded-full opacity-20"
+              />
+              <div className="relative">
+                <h2
+                  id="fin-titre"
+                  className="text-encre text-xl font-semibold tracking-tight text-balance sm:text-3xl"
+                >
+                  Prenez une question quand vous avez deux minutes.
+                </h2>
+                <p className="text-attenue mt-2 font-mono text-xs sm:text-sm">
+                  {precisions}
+                </p>
+              </div>
+              <a
+                href={LIEN_TELECHARGEMENT}
+                className="bg-encre hover:bg-encre/90 relative inline-flex shrink-0 items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-base font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_36px_-8px] hover:shadow-white/40"
               >
-                Prenez une question quand vous avez deux minutes.
-              </h2>
-              <p className="text-attenue mt-2 text-[0.95rem]">{precisions}</p>
+                <IconePomme />
+                Télécharger pour macOS
+              </a>
             </div>
-            <a
-              href={LIEN_TELECHARGEMENT}
-              className="bg-encre hover:bg-encre/90 inline-flex shrink-0 items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-base font-medium text-[#0b0c0e] transition-colors"
-            >
-              <IconePomme />
-              Télécharger pour macOS
-            </a>
-          </div>
+          </Revelation>
         </section>
       </main>
 
-      <footer className="border-bordure/70 border-t px-6 py-12">
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <footer className="border-bordure/60 border-t px-6 py-12">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Logo taille={28} className="rounded-[8px]" />
             <div>
@@ -533,13 +504,13 @@ function Etape({ numero, titre, children }: ProprietesEtape) {
     <li className="flex gap-5">
       <span
         aria-hidden="true"
-        className="border-bordure-vive bg-panneau text-attenue mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border font-mono text-sm"
+        className="border-bordure-vive bg-panneau text-accent mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border font-mono text-sm"
       >
         {numero}
       </span>
       <div className="min-w-0 flex-1">
         <h3 className="text-encre text-base font-semibold">{titre}</h3>
-        <div className="text-attenue mt-2 text-[0.95rem] leading-relaxed">
+        <div className="text-attenue mt-2 max-w-3xl text-[0.95rem] leading-relaxed">
           {children}
         </div>
       </div>
