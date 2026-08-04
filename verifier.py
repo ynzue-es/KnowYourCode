@@ -19,7 +19,7 @@ import json
 import os
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 # Avant tout import du paquet : la vérification ne doit pas écrire dans
@@ -239,6 +239,79 @@ def verifier_statistiques() -> None:
     )
 
 
+def verifier_regularite() -> None:
+    """Contrôles sur la série, la tendance et le calendrier.
+
+    Ces trois calculs dépendent de la date du jour : elle est passée en
+    paramètre, sinon la vérification changerait de résultat à minuit.
+    """
+    jour = date(2026, 8, 5)
+
+    def le(jour_du_mois: int, score: int) -> EntreeHistorique:
+        return _entree(
+            "id", "a.py", "f", "python",
+            datetime(2026, 8, jour_du_mois, 10, tzinfo=timezone.utc),
+            "repondu", score,
+        )
+
+    suite = calculer_statistiques([le(3, 50), le(4, 60), le(5, 70)], aujourdhui=jour)
+    _verifier(suite.serie_en_cours == 3, "trois jours d'affilée font une série de trois")
+
+    trou = calculer_statistiques([le(1, 50), le(3, 60), le(5, 70)], aujourdhui=jour)
+    _verifier(trou.serie_en_cours == 1, "un jour manquant casse la série")
+
+    ancienne = calculer_statistiques([le(1, 50), le(2, 60)], aujourdhui=jour)
+    _verifier(
+        ancienne.serie_en_cours == 0,
+        "une série finie il y a plusieurs jours ne compte plus",
+    )
+
+    veille = calculer_statistiques([le(3, 50), le(4, 60)], aujourdhui=jour)
+    _verifier(
+        veille.serie_en_cours == 2,
+        "une série qui s'arrête hier compte encore, la journée n'est pas finie",
+    )
+
+    courte = calculer_statistiques([le(4, 50), le(5, 60)], aujourdhui=jour)
+    _verifier(
+        courte.tendance is None,
+        "sans deux paquets complets, aucune tendance n'est affichée",
+    )
+
+    dix = [le(1, 40)] * 5 + [le(5, 80)] * 5
+    _verifier(
+        calculer_statistiques(dix, aujourdhui=jour).tendance == 40.0,
+        "la tendance compare les cinq dernières aux cinq précédentes",
+    )
+
+    calendrier = calculer_statistiques([le(5, 70), le(5, 80)], aujourdhui=jour)
+    _verifier(
+        len(calendrier.activite) == 84,
+        "le calendrier couvre douze semaines, jours vides compris",
+    )
+    _verifier(
+        calendrier.activite[-1].jour == jour and calendrier.activite[-1].nombre == 2,
+        "le dernier jour du calendrier est aujourd'hui, avec son compte",
+    )
+
+    tranches = calculer_statistiques(
+        [le(5, 10), le(5, 45), le(5, 65), le(5, 95), le(5, 100)], aujourdhui=jour
+    ).repartition_scores
+    _verifier(
+        [t.nombre for t in tranches] == [1, 1, 1, 2],
+        "chaque note tombe dans sa tranche, cent compris",
+    )
+
+    vide = calculer_statistiques([], aujourdhui=jour)
+    _verifier(
+        vide.serie_en_cours == 0
+        and vide.tendance is None
+        and vide.meilleur_score == 0
+        and len(vide.activite) == 84,
+        "un historique vide rend des valeurs neutres sans lever",
+    )
+
+
 def verifier_rappel() -> None:
     """Contrôles sans interface sur le rappel posé dans Claude Code.
 
@@ -342,6 +415,7 @@ def main() -> int:
     verifier_statistiques()
     verifier_lecture_historique()
     verifier_rappel()
+    verifier_regularite()
 
     application = QApplication(sys.argv)
     _mode_barre_de_menus()

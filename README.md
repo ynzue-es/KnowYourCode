@@ -127,11 +127,22 @@ La progression et les réglages ne figurent pas dans ce cycle : ils vivent dans
 la grande fenêtre, qui s'ouvre et se ferme sans rien changer à l'exercice en
 cours.
 
-La progression montre le nombre de réponses, le score moyen et le score
-récent, la courbe des vingt derniers scores, ce qui revient le plus souvent
-dans les oublis, les fonctions les moins bien expliquées et la répartition par
-langage. Tant qu'aucune réponse n'a été donnée, elle dit juste qu'il n'y a
-encore rien à montrer, plutôt que d'afficher des zéros qui ne diraient rien.
+La progression montre, dans cet ordre : quatre chiffres clés (score moyen avec
+sa tendance, jours d'affilée, réponses données, fonctions vues), un calendrier
+des douze dernières semaines, la courbe des vingt derniers scores, la
+répartition des notes par tranche, le détail par langage, ce qui revient le
+plus souvent dans les oublis, et les fonctions les moins bien expliquées. Tant
+qu'aucune réponse n'a été donnée, elle dit juste qu'il n'y a encore rien à
+montrer, plutôt que d'afficher des zéros qui ne diraient rien.
+
+Le choix des formes suit le travail de chaque donnée : un chiffre qui résume
+se pose en grand plutôt qu'en graphique, une régularité se lit en calendrier
+parce que ce sont les trous qui parlent, une répartition se lit en barres
+parce qu'on y compare des longueurs. Les couleurs suivent la même règle : une
+teinte unique pour une série unique, une seule teinte du vide au plein pour
+une intensité, des teintes distinctes pour des catégories. Ces dernières sont
+passées à un validateur de palette plutôt que choisies à l'œil, pour rester
+séparables en vision déficiente.
 
 Les transitions autorisées sont déclarées dans `etats.py` et vérifiées à
 chaque passage : une transition hors table est traitée comme un bug, pas comme

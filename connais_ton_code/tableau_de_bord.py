@@ -1,344 +1,180 @@
-"""Le tableau de bord des statistiques de progression.
+"""L'affichage de la progression.
 
 Il ne calcule rien : `statistiques.py` a déjà transformé l'historique en
-valeurs prêtes à afficher, ce widget se contente de les poser à l'écran.
-`afficher` est rappelée à chaque ouverture : mieux vaut repartir d'une colonne
-vide que d'empiler les widgets d'une ouverture à l'autre.
+valeurs prêtes à afficher.
+
+Le choix des formes suit le travail que fait chaque donnée. Un chiffre qui
+résume se pose en grand plutôt qu'en graphique. Une évolution se lit en
+courbe. Une régularité se lit en calendrier, parce que ce sont les trous qui
+parlent. Une répartition se lit en barres, parce qu'on y compare des
+longueurs.
+
+Les couleurs suivent la même règle. Une série unique n'a rien à distinguer :
+elle prend la couleur d'accent. Une intensité prend une seule teinte, du vide
+au plein. Des catégories prennent des teintes distinctes, vérifiées avec un
+validateur de palette plutôt qu'à l'œil, pour rester séparables en vision
+déficiente.
 """
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QToolTip, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
-    FlowLayout,
-    HorizontalSeparator,
-    SimpleCardWidget,
     SmoothScrollArea,
     StrongBodyLabel,
     TitleLabel,
 )
 
-from .apparence import COULEUR_ACCENT, COULEUR_FOND_PANNEAU, COULEUR_TEXTE_ATTENUE
-from .statistiques import FonctionMalExpliquee, Statistiques
+from .statistiques import Statistiques
 
-LARGEUR = 600
-HAUTEUR = 480
+LARGEUR = 560
+HAUTEUR = 440
 
-HAUTEUR_COURBE = 90
-NOMBRE_OUBLIS_AFFICHES = 10
-NOMBRE_FONCTIONS_AFFICHEES = 6
+_COULEUR_CARTE = "#1f2126"
+_COULEUR_TEXTE = "#e8eaed"
+_COULEUR_SECONDAIRE = "#a9adb5"
+_COULEUR_ATTENUE = "#7c818a"
+
+# Série unique : la couleur ne distingue rien, elle marque seulement la donnée.
+_ACCENT = "#4c8dff"
+
+# Palette catégorielle passée au validateur en fond sombre : bande de clarté,
+# plancher de saturation, séparation en vision déficiente et contraste, les
+# cinq contrôles au vert.
+_CATEGORIES = ("#4c8dff", "#c9821f", "#2fa87f")
+
+# Une seule teinte, du vide au plein : c'est une intensité, pas une identité.
+_ECHELLE_ACTIVITE = ("#23262c", "#2b569f", "#3a72d0", "#4c8dff", "#7dabff")
+
+_BON = "#2fa87f"
+_MAUVAIS = "#c9821f"
+
+_COTE_CASE = 18
+_ECART_CASE = 5
+_LARGEUR_JOURS = 26
+_HAUTEUR_COURBE = 124
+_HAUTEUR_BARRES = 104
 
 
-class TableauDeBord(QWidget):
-    """La colonne défilante qui affiche la progression de l'utilisateur."""
+class _Carte(QFrame):
+    """Un chiffre qui se suffit à lui-même, posé en grand."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        # Taille minimale et non figée : le même widget sert dans le panneau
-        # étroit et dans la grande fenêtre, où il doit occuper la place.
-        self.setMinimumSize(LARGEUR, HAUTEUR)
-        self._construire()
-
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
-
-    def _construire(self) -> None:
-        exterieur = QVBoxLayout(self)
-        exterieur.setContentsMargins(0, 0, 0, 0)
-
-        cadre = QFrame(self)
-        cadre.setObjectName("tableauDeBord")
-        cadre.setStyleSheet(
-            f"#tableauDeBord {{ background-color: {COULEUR_FOND_PANNEAU};"
-            f" border-radius: 10px; }}"
+    def __init__(self, valeur: str, libelle: str, detail: str = "") -> None:
+        super().__init__()
+        self.setObjectName("carte")
+        self.setStyleSheet(
+            f"#carte {{ background-color: {_COULEUR_CARTE}; border-radius: 10px; }}"
         )
-        exterieur.addWidget(cadre)
+        self.setFixedHeight(96)
 
-        interieur = QVBoxLayout(cadre)
-        interieur.setContentsMargins(0, 0, 0, 0)
+        colonne = QVBoxLayout(self)
+        colonne.setContentsMargins(14, 10, 14, 10)
+        colonne.setSpacing(0)
 
-        # Même recette que le panneau : le fond du cadre doit rester visible
-        # à travers la zone de défilement, sinon on voit un rectangle gris
-        # flotter par-dessus le panneau sombre.
-        self._defilement = SmoothScrollArea(cadre)
-        self._defilement.setWidgetResizable(True)
-        self._defilement.setFrameShape(QFrame.Shape.NoFrame)
-        self._defilement.setStyleSheet("QScrollArea, QWidget { background: transparent; }")
-        interieur.addWidget(self._defilement)
+        chiffre = TitleLabel(valeur, self)
+        chiffre.setStyleSheet(f"color: {_COULEUR_TEXTE};")
+        colonne.addWidget(chiffre)
 
-        self._contenu = QWidget()
-        self._contenu.setStyleSheet("background: transparent;")
-        self._colonne = QVBoxLayout(self._contenu)
-        self._colonne.setContentsMargins(20, 18, 20, 18)
-        self._colonne.setSpacing(16)
+        nom = CaptionLabel(libelle, self)
+        nom.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+        colonne.addWidget(nom)
 
-        self._defilement.setWidget(self._contenu)
-        self._defilement.viewport().setStyleSheet("background: transparent;")
-
-    # ------------------------------------------------------------------
-    # Remplissage
-    # ------------------------------------------------------------------
-
-    def afficher(self, statistiques: Statistiques) -> None:
-        """Remplace le contenu affiché par la photographie donnée."""
-        self._vider()
-
-        if statistiques.nombre_de_reponses == 0:
-            # Premier lancement, ou personne n'a encore répondu à une
-            # question : les cartes et la courbe n'ont rien à montrer, alors
-            # autant ne rien promettre plutôt que d'afficher des zéros.
-            self._colonne.addStretch(1)
-            self._colonne.addWidget(self._construire_message_vide())
-            self._colonne.addStretch(1)
-            return
-
-        self._colonne.addWidget(self._construire_cartes(statistiques))
-        self._colonne.addWidget(self._construire_courbe(statistiques))
-
-        if statistiques.oublis_recents:
-            self._colonne.addWidget(HorizontalSeparator(self._contenu))
-            self._colonne.addWidget(self._construire_oublis(statistiques))
-
-        if statistiques.fonctions_mal_expliquees:
-            self._colonne.addWidget(HorizontalSeparator(self._contenu))
-            self._colonne.addWidget(self._construire_fonctions(statistiques))
-
-        if statistiques.repartition_par_langage:
-            self._colonne.addWidget(HorizontalSeparator(self._contenu))
-            self._colonne.addWidget(self._construire_langages(statistiques))
-
-        self._colonne.addStretch(1)
-
-    def _vider(self) -> None:
-        while self._colonne.count():
-            element = self._colonne.takeAt(0)
-            widget = element.widget()
-            if widget is not None:
-                # `deleteLater` seul ne suffit pas : la suppression réelle
-                # attend le prochain passage dans la boucle d'événements, et
-                # le widget reste visible entretemps, superposé au nouveau
-                # contenu.
-                widget.hide()
-                widget.deleteLater()
-
-    # ------------------------------------------------------------------
-    # Historique vide
-    # ------------------------------------------------------------------
-
-    def _construire_message_vide(self) -> QWidget:
-        bloc = QWidget(self._contenu)
-        colonne = QVBoxLayout(bloc)
-        colonne.setContentsMargins(24, 0, 24, 0)
-
-        message = BodyLabel(
-            "Réponds à ta première question pour voir tes statistiques apparaître ici.",
-            bloc,
-        )
-        message.setWordWrap(True)
-        message.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        message.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-        colonne.addWidget(message)
-        return bloc
-
-    # ------------------------------------------------------------------
-    # Chiffres clés
-    # ------------------------------------------------------------------
-
-    def _construire_cartes(self, statistiques: Statistiques) -> QWidget:
-        ligne = QWidget(self._contenu)
-        disposition = QHBoxLayout(ligne)
-        disposition.setContentsMargins(0, 0, 0, 0)
-        disposition.setSpacing(10)
-
-        disposition.addWidget(
-            self._construire_carte(str(statistiques.nombre_de_reponses), "Réponses"),
-            stretch=1,
-        )
-        disposition.addWidget(
-            self._construire_carte(_formater_score(statistiques.score_moyen), "Score moyen"),
-            stretch=1,
-        )
-        disposition.addWidget(
-            self._construire_carte(
-                _formater_score(statistiques.score_moyen_recent), "Score récent"
-            ),
-            stretch=1,
-        )
-        return ligne
-
-    def _construire_carte(self, valeur: str, libelle: str) -> QWidget:
-        carte = SimpleCardWidget(self._contenu)
-        carte.setFixedHeight(86)
-        colonne = QVBoxLayout(carte)
-        colonne.setContentsMargins(4, 4, 4, 4)
-        colonne.setSpacing(2)
         colonne.addStretch(1)
-
-        etiquette_valeur = TitleLabel(valeur, carte)
-        etiquette_valeur.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        colonne.addWidget(etiquette_valeur)
-
-        etiquette_libelle = CaptionLabel(libelle, carte)
-        etiquette_libelle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        etiquette_libelle.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-        colonne.addWidget(etiquette_libelle)
-        colonne.addStretch(1)
-        return carte
-
-    # ------------------------------------------------------------------
-    # Courbe
-    # ------------------------------------------------------------------
-
-    def _construire_courbe(self, statistiques: Statistiques) -> QWidget:
-        bloc = QWidget(self._contenu)
-        colonne = QVBoxLayout(bloc)
-        colonne.setContentsMargins(0, 0, 0, 0)
-        colonne.setSpacing(4)
-
-        colonne.addWidget(StrongBodyLabel("Évolution des scores", bloc))
-
-        courbe = _CourbeScores(bloc)
-        courbe.definir_donnees(statistiques.scores_recents, statistiques.score_moyen)
-        colonne.addWidget(courbe)
-        return bloc
-
-    # ------------------------------------------------------------------
-    # Oublis récents
-    # ------------------------------------------------------------------
-
-    def _construire_oublis(self, statistiques: Statistiques) -> QWidget:
-        bloc = QWidget(self._contenu)
-        colonne = QVBoxLayout(bloc)
-        colonne.setContentsMargins(0, 0, 0, 0)
-        colonne.setSpacing(6)
-
-        colonne.addWidget(StrongBodyLabel("Ce que tu oublies le plus", bloc))
-
-        for oubli in statistiques.oublis_recents[:NOMBRE_OUBLIS_AFFICHES]:
-            ligne = BodyLabel(f"•  {oubli.point}  ({oubli.nom_fonction})", bloc)
-            ligne.setWordWrap(True)
-            colonne.addWidget(ligne)
-        return bloc
-
-    # ------------------------------------------------------------------
-    # Fonctions mal expliquées
-    # ------------------------------------------------------------------
-
-    def _construire_fonctions(self, statistiques: Statistiques) -> QWidget:
-        bloc = QWidget(self._contenu)
-        colonne = QVBoxLayout(bloc)
-        colonne.setContentsMargins(0, 0, 0, 0)
-        colonne.setSpacing(8)
-
-        colonne.addWidget(StrongBodyLabel("Fonctions les moins bien expliquées", bloc))
-
-        for fonction in statistiques.fonctions_mal_expliquees[:NOMBRE_FONCTIONS_AFFICHEES]:
-            colonne.addWidget(self._construire_ligne_fonction(fonction))
-        return bloc
-
-    def _construire_ligne_fonction(self, fonction: FonctionMalExpliquee) -> QWidget:
-        ligne = QWidget(self._contenu)
-        disposition = QHBoxLayout(ligne)
-        disposition.setContentsMargins(0, 0, 0, 0)
-        disposition.setSpacing(8)
-
-        textes = QVBoxLayout()
-        textes.setContentsMargins(0, 0, 0, 0)
-        textes.setSpacing(0)
-
-        nom = BodyLabel(fonction.nom_fonction, ligne)
-        nom.setWordWrap(True)
-        textes.addWidget(nom)
-
-        chemin = CaptionLabel(fonction.chemin_fichier, ligne)
-        chemin.setWordWrap(True)
-        chemin.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-        textes.addWidget(chemin)
-
-        disposition.addLayout(textes, stretch=1)
-
-        score = CaptionLabel(
-            f"{round(fonction.score_moyen)}/100, posée {fonction.nombre_de_fois} fois",
-            ligne,
-        )
-        score.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
-        score.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-        disposition.addWidget(score)
-        return ligne
-
-    # ------------------------------------------------------------------
-    # Répartition par langage
-    # ------------------------------------------------------------------
-
-    def _construire_langages(self, statistiques: Statistiques) -> QWidget:
-        bloc = QWidget(self._contenu)
-        colonne = QVBoxLayout(bloc)
-        colonne.setContentsMargins(0, 0, 0, 0)
-        colonne.setSpacing(6)
-
-        colonne.addWidget(StrongBodyLabel("Répartition par langage", bloc))
-
-        ligne = QWidget(bloc)
-        disposition = FlowLayout(ligne, needAni=False)
-        disposition.setContentsMargins(0, 0, 0, 0)
-        disposition.setHorizontalSpacing(18)
-        disposition.setVerticalSpacing(4)
-
-        for langage in statistiques.repartition_par_langage:
-            texte = (
-                f"{langage.langage}   {round(langage.score_moyen)}/100"
-                f"   ({langage.nombre_de_reponses})"
-            )
-            etiquette = CaptionLabel(texte, ligne)
-            etiquette.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-            disposition.addWidget(etiquette)
-
-        colonne.addWidget(ligne)
-        return bloc
+        if detail:
+            precision = CaptionLabel(detail, self)
+            precision.setStyleSheet(f"color: {_COULEUR_SECONDAIRE};")
+            precision.setWordWrap(True)
+            colonne.addWidget(precision)
 
 
-def _formater_score(score: float) -> str:
-    return f"{round(score)}/100"
+class _Calendrier(QWidget):
+    """Douze semaines de régularité, une case par jour.
 
-
-class _CourbeScores(QWidget):
-    """L'évolution des scores récents, dessinée à la main.
-
-    Un `QChart` complet serait disproportionné pour vingt points au plus :
-    une ligne, un point d'arrivée et un repère de moyenne suffisent, et le
-    dessin à la main garantit que le résultat reste lisible aussi bien avec
-    un seul point qu'avec vingt.
+    Ce sont les trous qui portent l'information, donc les jours sans réponse
+    sont dessinés comme les autres, en creux.
     """
 
-    _MARGE_HORIZONTALE = 10
-    _MARGE_VERTICALE = 12
-    _RAYON_POINT = 4
-
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, jours: list, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedHeight(HAUTEUR_COURBE)
-        self._scores: list[int] = []
-        self._moyenne = 0.0
+        self._jours = jours
+        self._maximum = max((jour.nombre for jour in jours), default=0)
+        self.setMouseTracking(True)
 
-    def definir_donnees(self, scores: list[int], moyenne: float) -> None:
+        self._decalage = jours[0].jour.weekday() if jours else 0
+        colonnes = (len(jours) + self._decalage + 6) // 7 if jours else 0
+        self.setFixedHeight(7 * (_COTE_CASE + _ECART_CASE))
+        self.setFixedWidth(_LARGEUR_JOURS + colonnes * (_COTE_CASE + _ECART_CASE))
+
+    def _case(self, index: int) -> QRectF:
+        position = index + self._decalage
+        return QRectF(
+            _LARGEUR_JOURS + (position // 7) * (_COTE_CASE + _ECART_CASE),
+            (position % 7) * (_COTE_CASE + _ECART_CASE),
+            _COTE_CASE,
+            _COTE_CASE,
+        )
+
+    def _teinte(self, nombre: int) -> str:
+        if nombre <= 0 or self._maximum <= 0:
+            return _ECHELLE_ACTIVITE[0]
+        # Quatre paliers plutôt qu'un dégradé continu : l'œil compare mal deux
+        # nuances voisines, il compare bien quatre niveaux.
+        palier = min(4, 1 + (nombre - 1) * 3 // max(1, self._maximum))
+        return _ECHELLE_ACTIVITE[palier]
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        peintre = QPainter(self)
+        peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Une lettre un jour sur deux : les sept d'affilée formeraient une
+        # colonne de bruit que personne ne lit.
+        peintre.setPen(QColor(_COULEUR_ATTENUE))
+        for rang, lettre in enumerate(("", "M", "", "J", "", "S", "")):
+            if not lettre:
+                continue
+            peintre.drawText(
+                QRectF(0, rang * (_COTE_CASE + _ECART_CASE), _LARGEUR_JOURS - 8, _COTE_CASE),
+                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight),
+                lettre,
+            )
+
+        peintre.setPen(Qt.PenStyle.NoPen)
+        for index, jour in enumerate(self._jours):
+            peintre.setBrush(QColor(self._teinte(jour.nombre)))
+            peintre.drawRoundedRect(self._case(index), 3, 3)
+        peintre.end()
+
+    def mouseMoveEvent(self, event) -> None:
+        for index, jour in enumerate(self._jours):
+            if not self._case(index).contains(event.position()):
+                continue
+            if jour.nombre == 0:
+                compte = "aucune réponse"
+            elif jour.nombre == 1:
+                compte = "1 réponse"
+            else:
+                compte = f"{jour.nombre} réponses"
+            QToolTip.showText(
+                event.globalPosition().toPoint(),
+                f"{jour.jour.strftime('%d/%m/%Y')} : {compte}",
+                self,
+            )
+            return
+        QToolTip.hideText()
+
+
+class _Courbe(QWidget):
+    """L'évolution des scores, série unique, dernier point nommé."""
+
+    def __init__(self, scores: list[int], moyenne: float, parent=None) -> None:
+        super().__init__(parent)
         self._scores = scores
         self._moyenne = moyenne
-        self.update()
-
-    def _position(self, index: int, score: int, largeur: float, hauteur: float) -> tuple[float, float]:
-        if len(self._scores) > 1:
-            x = self._MARGE_HORIZONTALE + largeur * index / (len(self._scores) - 1)
-        else:
-            x = self._MARGE_HORIZONTALE + largeur / 2
-        # Échelle fixe sur 0-100 : c'est le barème du score, pas une plage
-        # recalculée à chaque affichage qui exagérerait de petits écarts.
-        y = self._MARGE_VERTICALE + hauteur * (1 - score / 100)
-        return x, y
+        self.setFixedHeight(_HAUTEUR_COURBE)
 
     def paintEvent(self, event: QPaintEvent) -> None:
         if not self._scores:
@@ -347,57 +183,341 @@ class _CourbeScores(QWidget):
         peintre = QPainter(self)
         peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        largeur = self.width() - 2 * self._MARGE_HORIZONTALE
-        hauteur = self.height() - 2 * self._MARGE_VERTICALE
-        if largeur <= 0 or hauteur <= 0:
+        marge = 10.0
+        largeur = max(1.0, self.width() - 2 * marge - 32)
+        hauteur = self.height() - 2 * marge
+
+        def point(rang: int, score: int) -> QPointF:
+            pas = largeur / max(1, len(self._scores) - 1)
+            return QPointF(marge + rang * pas, marge + (100 - score) / 100 * hauteur)
+
+        # Repère de la moyenne, volontairement discret : c'est un niveau de
+        # référence, pas une donnée.
+        stylo = QPen(QColor(255, 255, 255, 30))
+        stylo.setWidthF(1)
+        peintre.setPen(stylo)
+        y_moyenne = marge + (100 - self._moyenne) / 100 * hauteur
+        peintre.drawLine(QPointF(marge, y_moyenne), QPointF(marge + largeur, y_moyenne))
+
+        chemin = QPainterPath()
+        for rang, score in enumerate(self._scores):
+            emplacement = point(rang, score)
+            if rang == 0:
+                chemin.moveTo(emplacement)
+            else:
+                chemin.lineTo(emplacement)
+
+        trait = QPen(QColor(_ACCENT))
+        trait.setWidthF(2)
+        trait.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        trait.setCapStyle(Qt.PenCapStyle.RoundCap)
+        peintre.setPen(trait)
+        peintre.setBrush(Qt.BrushStyle.NoBrush)
+        peintre.drawPath(chemin)
+
+        # Seul le dernier point est marqué et chiffré : nommer tous les points
+        # remplirait le graphique de nombres que personne ne lit.
+        dernier = point(len(self._scores) - 1, self._scores[-1])
+        peintre.setPen(Qt.PenStyle.NoPen)
+        peintre.setBrush(QColor(_ACCENT))
+        peintre.drawEllipse(dernier, 4.5, 4.5)
+
+        peintre.setPen(QColor(_COULEUR_SECONDAIRE))
+        peintre.drawText(
+            QRectF(dernier.x() + 8, dernier.y() - 10, 32, 20),
+            int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
+            str(self._scores[-1]),
+        )
+        peintre.end()
+
+
+class _Barres(QWidget):
+    """Répartition des notes, en barres horizontales."""
+
+    def __init__(self, tranches: list, parent=None) -> None:
+        super().__init__(parent)
+        self._tranches = tranches
+        self._maximum = max((tranche.nombre for tranche in tranches), default=0)
+        self.setFixedHeight(_HAUTEUR_BARRES)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        if not self._tranches:
             return
 
-        self._dessiner_repere_moyenne(peintre, largeur, hauteur)
+        peintre = QPainter(self)
+        peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        points = [
-            self._position(i, score, largeur, hauteur) for i, score in enumerate(self._scores)
-        ]
+        largeur_libelle = 66.0
+        largeur_valeur = 26.0
+        # Deux pixels de fond entre deux barres : sans cet écart, deux barres
+        # voisines se lisent comme une seule.
+        hauteur = self.height() / len(self._tranches) - 2
+        disponible = max(1.0, self.width() - largeur_libelle - largeur_valeur - 8)
 
-        if len(points) > 1:
-            self._dessiner_ligne(peintre, points)
+        for rang, tranche in enumerate(self._tranches):
+            haut = rang * (hauteur + 2)
 
-        self._dessiner_point_final(peintre, points[-1])
+            peintre.setPen(QColor(_COULEUR_ATTENUE))
+            peintre.drawText(
+                QRectF(0, haut, largeur_libelle, hauteur),
+                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
+                tranche.libelle,
+            )
 
-    def _dessiner_repere_moyenne(self, peintre: QPainter, largeur: float, hauteur: float) -> None:
-        couleur = QColor(COULEUR_TEXTE_ATTENUE)
-        couleur.setAlpha(90)
-        y = self._MARGE_VERTICALE + hauteur * (1 - self._moyenne / 100)
+            peintre.setPen(Qt.PenStyle.NoPen)
+            peintre.setBrush(QColor(_ECHELLE_ACTIVITE[0]))
+            peintre.drawRoundedRect(
+                QRectF(largeur_libelle, haut + 3, disponible, hauteur - 6), 4, 4
+            )
 
-        crayon = QPen(couleur, 1)
-        peintre.setPen(crayon)
-        peintre.drawLine(
-            int(self._MARGE_HORIZONTALE),
-            int(y),
-            int(self._MARGE_HORIZONTALE + largeur),
-            int(y),
+            part = tranche.nombre / self._maximum if self._maximum else 0
+            if part > 0:
+                peintre.setBrush(QColor(_ACCENT))
+                peintre.drawRoundedRect(
+                    QRectF(
+                        largeur_libelle,
+                        haut + 3,
+                        max(8.0, disponible * part),
+                        hauteur - 6,
+                    ),
+                    4,
+                    4,
+                )
+
+            peintre.setPen(QColor(_COULEUR_SECONDAIRE))
+            peintre.drawText(
+                QRectF(self.width() - largeur_valeur, haut, largeur_valeur, hauteur),
+                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight),
+                str(tranche.nombre),
+            )
+        peintre.end()
+
+
+class TableauDeBord(QWidget):
+    """La progression, sous forme lisible."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # Taille minimale et non figée : la fenêtre doit pouvoir grandir.
+        self.setMinimumSize(LARGEUR, HAUTEUR)
+
+        exterieur = QVBoxLayout(self)
+        exterieur.setContentsMargins(0, 0, 0, 0)
+
+        self._contenu = QWidget()
+        self._colonne = QVBoxLayout(self._contenu)
+        self._colonne.setContentsMargins(0, 0, 12, 0)
+        self._colonne.setSpacing(14)
+        self._colonne.addStretch(1)
+
+        defilement = SmoothScrollArea(self)
+        defilement.setWidget(self._contenu)
+        defilement.setWidgetResizable(True)
+        defilement.setFrameShape(QFrame.Shape.NoFrame)
+        defilement.setStyleSheet("QScrollArea, QWidget { background: transparent; }")
+        defilement.viewport().setStyleSheet("background: transparent;")
+        exterieur.addWidget(defilement)
+
+    # ------------------------------------------------------------------
+    # Remplissage
+    # ------------------------------------------------------------------
+
+    def afficher(self, statistiques: Statistiques) -> None:
+        """Remplit la vue. Peut être rappelée autant de fois qu'on veut."""
+        self._vider()
+
+        if statistiques.nombre_de_reponses == 0:
+            self._poser(self._message_vide())
+            return
+
+        self._poser(self._cartes(statistiques))
+        self._poser(
+            self._section(
+                "Régularité",
+                self._centrer(_Calendrier(statistiques.activite)),
+                "Une case par jour sur les douze dernières semaines. "
+                "Plus la case est claire, plus tu as répondu ce jour-là.",
+            )
         )
+        self._poser(
+            self._section(
+                "Évolution des scores",
+                _Courbe(statistiques.scores_recents, statistiques.score_moyen),
+                f"Les {len(statistiques.scores_recents)} dernières réponses. "
+                "Le trait horizontal marque la moyenne.",
+            )
+        )
+        self._poser(
+            self._section(
+                "Répartition des notes", _Barres(statistiques.repartition_scores)
+            )
+        )
+        if statistiques.repartition_par_langage:
+            self._poser(self._langages(statistiques))
+        if statistiques.oublis_recents:
+            self._poser(self._oublis(statistiques))
+        if statistiques.fonctions_mal_expliquees:
+            self._poser(self._fonctions(statistiques))
 
-    def _dessiner_ligne(self, peintre: QPainter, points: list[tuple[float, float]]) -> None:
-        trace = QPainterPath()
-        trace.moveTo(*points[0])
-        for x, y in points[1:]:
-            trace.lineTo(x, y)
+    def _poser(self, bloc: QWidget) -> None:
+        self._colonne.insertWidget(self._colonne.count() - 1, bloc)
 
-        crayon = QPen(QColor(COULEUR_ACCENT))
-        crayon.setWidthF(2)
-        crayon.setCapStyle(Qt.PenCapStyle.RoundCap)
-        crayon.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        peintre.setPen(crayon)
-        peintre.drawPath(trace)
+    def _vider(self) -> None:
+        while self._colonne.count() > 1:
+            element = self._colonne.takeAt(0)
+            widget = element.widget()
+            if widget is not None:
+                # `deleteLater` ne supprime qu'au prochain tour de boucle : sans
+                # ce masquage, l'ancien contenu resterait visible par-dessus.
+                widget.hide()
+                widget.deleteLater()
 
-    def _dessiner_point_final(self, peintre: QPainter, point: tuple[float, float]) -> None:
-        x, y = point
-        r = self._RAYON_POINT
+    # ------------------------------------------------------------------
+    # Blocs
+    # ------------------------------------------------------------------
 
-        # L'anneau de la couleur de fond détache le point de la ligne, sans
-        # ajouter de contour qui alourdirait le tracé.
-        anneau = QPen(QColor(COULEUR_FOND_PANNEAU))
-        anneau.setWidthF(2)
-        peintre.setPen(anneau)
-        peintre.setBrush(QColor(COULEUR_ACCENT))
-        peintre.drawEllipse(QRectF(x - r, y - r, 2 * r, 2 * r))
+    def _centrer(self, contenu: QWidget) -> QWidget:
+        """Met un contenu de largeur fixe au milieu de son cadre."""
+        bloc = QWidget()
+        ligne = QHBoxLayout(bloc)
+        ligne.setContentsMargins(0, 0, 0, 0)
+        ligne.addStretch(1)
+        ligne.addWidget(contenu)
+        ligne.addStretch(1)
+        return bloc
+
+    def _message_vide(self) -> QWidget:
+        bloc = QWidget()
+        colonne = QVBoxLayout(bloc)
+        colonne.addStretch(1)
+        message = BodyLabel(
+            "Réponds à ta première question pour voir tes statistiques apparaître ici.",
+            bloc,
+        )
+        message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        message.setStyleSheet(f"color: {_COULEUR_SECONDAIRE};")
+        colonne.addWidget(message)
+        colonne.addStretch(1)
+        return bloc
+
+    def _cartes(self, statistiques: Statistiques) -> QWidget:
+        bloc = QWidget()
+        ligne = QHBoxLayout(bloc)
+        ligne.setContentsMargins(0, 0, 0, 0)
+        ligne.setSpacing(10)
+
+        tendance = ""
+        if statistiques.tendance is not None:
+            signe = "+" if statistiques.tendance >= 0 else ""
+            tendance = f"{signe}{statistiques.tendance:.0f} sur les 5 dernières"
+
+        jours = statistiques.serie_en_cours
+        for valeur, libelle, detail in (
+            (f"{statistiques.score_moyen:.0f}", "Score moyen", tendance),
+            (str(jours), "Jours d'affilée", "en cours" if jours else "série à relancer"),
+            (
+                str(statistiques.nombre_de_reponses),
+                "Réponses",
+                f"{statistiques.nombre_de_passages} passée(s)",
+            ),
+            (
+                str(statistiques.fonctions_couvertes),
+                "Fonctions vues",
+                f"dans {statistiques.fichiers_couverts} fichier(s)",
+            ),
+        ):
+            ligne.addWidget(_Carte(valeur, libelle, detail))
+        return bloc
+
+    def _langages(self, statistiques: Statistiques) -> QWidget:
+        bloc = self._section("Par langage", None)
+        colonne = bloc.layout()
+
+        for rang, langage in enumerate(statistiques.repartition_par_langage):
+            ligne = QHBoxLayout()
+            ligne.setSpacing(8)
+
+            # La pastille porte l'identité, le texte reste en encre neutre :
+            # un libellé coloré se confondrait avec une donnée.
+            pastille = QFrame(bloc)
+            pastille.setFixedSize(9, 9)
+            pastille.setStyleSheet(
+                f"background-color: {_CATEGORIES[rang % len(_CATEGORIES)]};"
+                " border-radius: 4px;"
+            )
+            ligne.addWidget(pastille)
+            ligne.addWidget(BodyLabel(langage.langage, bloc))
+            ligne.addStretch(1)
+
+            chiffres = CaptionLabel(
+                f"{langage.score_moyen:.0f} de moyenne sur "
+                f"{langage.nombre_de_reponses} réponse(s)",
+                bloc,
+            )
+            chiffres.setStyleSheet(f"color: {_COULEUR_SECONDAIRE};")
+            ligne.addWidget(chiffres)
+            colonne.addLayout(ligne)
+        return bloc
+
+    def _oublis(self, statistiques: Statistiques) -> QWidget:
+        bloc = self._section("Ce que tu oublies le plus", None)
+        colonne = bloc.layout()
+        for oubli in statistiques.oublis_recents[:8]:
+            ligne = BodyLabel(f"•  {oubli.point}", bloc)
+            ligne.setWordWrap(True)
+            colonne.addWidget(ligne)
+
+            source = CaptionLabel(f"     {oubli.nom_fonction}", bloc)
+            source.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+            colonne.addWidget(source)
+        return bloc
+
+    def _fonctions(self, statistiques: Statistiques) -> QWidget:
+        bloc = self._section("Fonctions les moins bien expliquées", None)
+        colonne = bloc.layout()
+        for fonction in statistiques.fonctions_mal_expliquees[:6]:
+            ligne = QHBoxLayout()
+            ligne.setSpacing(8)
+
+            gauche = QVBoxLayout()
+            gauche.setSpacing(0)
+            gauche.addWidget(BodyLabel(fonction.nom_fonction, bloc))
+            chemin = CaptionLabel(fonction.chemin_fichier, bloc)
+            chemin.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+            gauche.addWidget(chemin)
+            ligne.addLayout(gauche)
+            ligne.addStretch(1)
+
+            note = StrongBodyLabel(f"{fonction.score_moyen:.0f}", bloc)
+            note.setStyleSheet(
+                f"color: {_BON if fonction.score_moyen >= 60 else _MAUVAIS};"
+            )
+            ligne.addWidget(note)
+
+            fois = CaptionLabel(f"× {fonction.nombre_de_fois}", bloc)
+            fois.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+            ligne.addWidget(fois)
+            colonne.addLayout(ligne)
+        return bloc
+
+    def _section(
+        self, titre: str, contenu: QWidget | None, note: str = ""
+    ) -> QWidget:
+        bloc = QFrame()
+        bloc.setObjectName("section")
+        bloc.setStyleSheet(
+            f"#section {{ background-color: {_COULEUR_CARTE}; border-radius: 10px; }}"
+        )
+        colonne = QVBoxLayout(bloc)
+        colonne.setContentsMargins(14, 12, 14, 14)
+        colonne.setSpacing(8)
+        colonne.addWidget(StrongBodyLabel(titre, bloc))
+
+        if contenu is not None:
+            colonne.addWidget(contenu)
+        if note:
+            legende = CaptionLabel(note, bloc)
+            legende.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+            legende.setWordWrap(True)
+            colonne.addWidget(legende)
+        return bloc
