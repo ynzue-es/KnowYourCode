@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Droits demandés au runtime durci, qu'exige la notarisation.
+
+  Un interpréteur Python et les bibliothèques Qt ne satisfont pas les règles
+  par défaut du runtime durci : Python compile du code à la volée, et le
+  paquet embarque des .so et des cadriciels signés par nous plutôt que par
+  Apple. Les deux premiers droits lèvent exactement ces deux obstacles, et
+  rien de plus : aucune capacité réseau ou disque n'est demandée ici, le
+  bac à sable n'étant pas activé pour une distribution hors App Store.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Python génère et exécute du code machine à l'exécution. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+
+	<!-- Les .so de Qt et de PyObjC portent notre signature, pas celle d'Apple. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<!-- `ctypes` et les modules d'extension chargent des pages exécutables
+	     anonymes ; sans ce droit, le chargement échoue sur certains d'entre
+	     eux au premier appel, longtemps après le démarrage. -->
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+
+	<!-- L'application lit ses variables d'environnement (KNOWYOURCODE_DOSSIER,
+	     MISTRAL_API_KEY) : le runtime durci les efface sans ce droit. -->
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+</dict>
+</plist>

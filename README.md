@@ -55,6 +55,33 @@ Le paquet ainsi fabriqué contient le chemin de ce dépôt : il n'est pas
 transportable d'une machine à l'autre, mais il se refait en une commande. Vous
 pouvez le glisser dans le dossier Applications ou le mettre au démarrage.
 
+## Fabriquer le DMG
+
+Deux paquets, deux usages. `creer_app.py` produit un paquet jetable qui pointe
+vers ce dépôt : fabriqué en une seconde, bon pour cette machine seulement.
+`creer_dmg.py` gèle Python, Qt et le code à l'intérieur du paquet, le signe et
+l'enferme dans une image disque : plus lent, mais c'est celui qui se donne.
+
+```bash
+python outils/creer_dmg.py
+```
+
+L'image atterrit dans `dist/`, nommée `KnowYourCode-<version>-<arch>.dmg`, la
+version étant lue dans `pyproject.toml` et nulle part ailleurs. Elle contient
+l'application et le raccourci vers Applications, comme tout le monde s'y
+attend.
+
+Sans certificat « Developer ID Application » dans le trousseau, le script
+signe le paquet ad hoc et le dit clairement : l'image se monte et
+l'application démarre ici, mais macOS la refusera partout ailleurs. S'il
+trouve un certificat, il l'utilise et signe avec runtime durci ;
+`--notariser` ajoute la soumission à Apple et l'agrafage du ticket.
+
+Poser un tag `v*` déclenche `.github/workflows/publication.yml`, qui refait
+tout cela sur un runner macOS et attache le DMG à une Release. Obtenir le
+certificat, créer la clé d'API et poser les secrets GitHub :
+[outils/PUBLIER.md](outils/PUBLIER.md).
+
 ## Le rappel dans Claude Code
 
 Plutôt qu'une notification, qui suppose une autorisation du système et
@@ -210,6 +237,13 @@ se sert `verifier.py` pour ne pas polluer l'historique réel.
   Comme aucun argument n'est passé à l'exécutable, c'est `LSEnvironment` qui
   pointe vers un `sitecustomize.py`, importé d'office par Python, et qui
   démarre l'application.
+- **Le paquet distribuable.** `outils/creer_dmg.py` obtient la même identité
+  autrement : le binaire d'amorçage de PyInstaller est un vrai programme, il
+  n'y a donc pas non plus de relais en cours de route. La notarisation impose
+  le runtime durci, qui interdit par défaut ce dont Python et Qt vivent :
+  compiler du code à la volée et charger des bibliothèques signées par
+  quelqu'un d'autre qu'Apple. `outils/droits.plist` lève ces deux
+  interdictions, et seulement celles-là.
 - **Les certificats.** Les Python installés depuis python.org n'ont pas de
   magasin de certificats tant qu'on n'a pas lancé leur script d'installation.
   L'appel à Mistral passe donc par `certifi`.
