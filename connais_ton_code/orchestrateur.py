@@ -1,8 +1,8 @@
 """Le chef d'orchestre : il tient l'état courant et branche les briques.
 
-Toute la logique du cycle est ici. Les fenêtres signalent des intentions, les
+Toute la logique du cycle est ici. Le panneau signale des intentions, les
 briques rendent des données, et c'est l'orchestrateur qui décide de l'état
-suivant. Ce découpage est ce qui permettra de remplacer le détecteur, le
+suivant. Ce découpage est ce qui permet de remplacer le détecteur, le
 sélecteur ou l'évaluateur sans rouvrir l'interface.
 """
 
@@ -14,49 +14,59 @@ from .barre_menu import BarreMenu
 from .detecteur import Detecteur
 from .etats import Etat, transition_valide
 from .evaluateur import Evaluateur
-from .fenetre import FenetreFlottante
 from .historique import Historique
-from .invitation import BulleInvitation
 from .modeles import Evaluation, Extrait
+from .panneau import Panneau
 from .reglages import Reglages
 from .selecteur import Selecteur
 from .taches import TacheEvaluation
 
 INTERVALLE_SONDAGE_MS = 1000
 
+TITRE_NOTIFICATION = "KnowYourCode"
+TEXTE_NOTIFICATION = "Répondez à quelques questions sur votre code !"
+
+MESSAGE_REPOS = "Rien en attente. Une question quand vous voulez."
+MESSAGE_EN_PAUSE = "Détection en pause. Rien ne s'ouvrira tout seul."
+MESSAGE_SANS_EXTRAIT = (
+    "Aucune fonction à faire expliquer n'a été trouvée dans le projet."
+)
+
 
 class Orchestrateur(QObject):
-    """Fait tourner le cycle Masquée → Invitation → Question → Évaluation → Retour."""
+    """Fait tourner le cycle Fermé → Question → Évaluation → Retour."""
 
     def __init__(
         self,
-        fenetre: FenetreFlottante,
-        bulle: BulleInvitation,
+        panneau: Panneau,
+        barre: BarreMenu,
         detecteur: Detecteur,
         selecteur: Selecteur,
         evaluateur: Evaluateur,
         historique: Historique,
         reglages: Reglages,
-        barre: BarreMenu | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._fenetre = fenetre
-        self._bulle = bulle
+        self._panneau = panneau
+        self._barre = barre
         self._detecteur = detecteur
         self._selecteur = selecteur
         self._evaluateur = evaluateur
         self._historique = historique
         self._reglages = reglages
-        self._barre = barre
 
-        self._etat = Etat.MASQUEE
+        self._etat = Etat.FERME
         self._extrait_courant: Extrait | None = None
         self._actif = True
 
-        # Une évaluation lancée puis abandonnée (Esc) finit quand même par
-        # rendre son résultat : le jeton permet de reconnaître un retour
-        # devenu sans objet au lieu de rouvrir la fenêtre par surprise.
+        # Une détection ne pose pas la question tout de suite : elle prévient,
+        # et la question attend qu'on vienne la chercher.
+        self._question_en_attente = False
+
+        # Une évaluation lancée puis abandonnée finit quand même par rendre
+        # son résultat : le jeton permet de reconnaître un retour devenu sans
+        # objet au lieu de rouvrir le panneau par surprise.
         self._jeton_evaluation = 0
 
         self._brancher()
@@ -70,9 +80,8 @@ class Orchestrateur(QObject):
     # ------------------------------------------------------------------
 
     def demarrer(self) -> None:
-        """Lance le sondage du détecteur. Rien ne s'affiche encore."""
-        if self._actif:
-            self._sonde.start()
+        """Applique l'état enregistré et lance le sondage."""
+        self.definir_actif(self._reglages.detection_active())
 
     def etat(self) -> Etat:
         return self._etat
@@ -80,44 +89,68 @@ class Orchestrateur(QObject):
     def est_actif(self) -> bool:
         return self._actif
 
+    def question_en_attente(self) -> bool:
+        return self._question_en_attente
+
+    def _brancher(self) -> None:
+        self._panneau.reponse_soumise.connect(self._sur_reponse)
+        self._panneau.passage_demande.connect(self._sur_passage)
+        self._panneau.suite_demandee.connect(self._sur_suite)
+        self._panneau.question_demandee.connect(self.poser_question)
+        self._panneau.fermeture_demandee.connect(self.fermer)
+        self._panneau.activation_changee.connect(self.definir_actif)
+        self._panneau.masque.connect(self._sur_masque)
+
+        self._barre.ouverture_demandee.connect(self.ouvrir)
+
+    # ------------------------------------------------------------------
+    # Détection
+    # ------------------------------------------------------------------
+
     def definir_actif(self, actif: bool) -> None:
         """Met la détection à l'écoute ou en pause.
 
         La pause n'arrête que la détection automatique : demander une question
-        depuis le menu reste possible, puisque c'est un geste explicite.
+        reste possible, puisque c'est un geste explicite.
         """
         self._actif = actif
         self._reglages.enregistrer_detection_active(actif)
-
-        if self._barre is not None:
-            self._barre.definir_actif(actif)
+        self._barre.definir_actif(actif)
+        self._panneau.definir_actif(actif)
 
         if actif:
             self._sonde.start()
             return
 
         self._sonde.stop()
-        # Une invitation déjà à l'écran deviendrait un vestige : la mettre en
-        # pause veut dire « laisse-moi tranquille », y compris maintenant.
-        if self._etat is Etat.INVITATION:
-            self._sur_rejet_invitation()
+        # Une question qui attendait n'a plus lieu d'être : mettre en pause
+        # veut dire « laisse-moi tranquille », y compris pour ce qui traînait.
+        self._definir_attente(False)
 
-    def _brancher(self) -> None:
-        self._fenetre.reponse_soumise.connect(self._sur_reponse)
-        self._fenetre.passage_demande.connect(self._sur_passage)
-        self._fenetre.suite_demandee.connect(self._sur_suite)
-        self._fenetre.masquage_demande.connect(self._sur_masquage)
-        self._fenetre.deplacee.connect(
-            lambda x, y: self._reglages.enregistrer_position("fenetre", x, y)
-        )
+    def _sonder(self) -> None:
+        """Un tour d'horloge : le détecteur a-t-il quelque chose à signaler ?"""
+        if not self._actif or self._question_en_attente:
+            return
+        if self._detecteur.session_active():
+            self.signaler()
 
-        self._bulle.ouverture_demandee.connect(self.poser_question)
-        self._bulle.rejet_demande.connect(self._sur_rejet_invitation)
+    def signaler(self) -> None:
+        """Prévient qu'une question attend, sans rien ouvrir.
 
-        if self._barre is not None:
-            self._barre.question_demandee.connect(self.poser_question)
-            self._barre.detection_simulee.connect(self._sur_detection_simulee)
-            self._barre.activation_changee.connect(self.definir_actif)
+        Une notification et rien d'autre : ouvrir un panneau par-dessus le
+        travail de quelqu'un est le meilleur moyen de le faire désinstaller.
+        """
+        self._definir_attente(True)
+        self._barre.notifier(TITRE_NOTIFICATION, TEXTE_NOTIFICATION)
+
+    def _definir_attente(self, en_attente: bool) -> None:
+        """Retient qu'une question attend, et le fait dire par l'icône.
+
+        La pastille double la notification : le système peut refuser de
+        l'afficher, l'icône non.
+        """
+        self._question_en_attente = en_attente
+        self._barre.definir_en_attente(en_attente)
 
     # ------------------------------------------------------------------
     # Transitions
@@ -128,66 +161,55 @@ class Orchestrateur(QObject):
             raise RuntimeError(f"Transition interdite : {self._etat} → {etat}")
         self._etat = etat
 
-    def _sonder(self) -> None:
-        """Un tour d'horloge : le détecteur a-t-il quelque chose à signaler ?"""
-        # Inviter par-dessus une question en cours reviendrait à effacer une
-        # réponse en train d'être écrite.
-        if self._etat is not Etat.MASQUEE:
-            return
-        if self._detecteur.session_active():
-            self.inviter()
+    def ouvrir(self) -> None:
+        """Le panneau s'ouvre : sur la question qui attendait, ou au repos."""
+        self._panneau.ancrer(self._barre.zone())
 
-    def inviter(self) -> None:
-        """Affiche la bulle d'invitation, sans encore choisir d'extrait.
-
-        Le tirage est repoussé au moment où l'utilisateur accepte : rien ne
-        garantit qu'il le fera, et une invitation ignorée ne doit pas brûler
-        un extrait.
-        """
-        if self._etat is not Etat.MASQUEE:
+        if self._etat is not Etat.FERME:
+            # Déjà ouvert : on le ramène simplement devant.
+            self._panneau.raise_()
+            self._panneau.activateWindow()
             return
-        self._bulle.afficher()
-        self._aller_vers(Etat.INVITATION)
+
+        if self._question_en_attente:
+            self.poser_question()
+            return
+
+        self._afficher_repos()
+
+    def _afficher_repos(self) -> None:
+        message = MESSAGE_REPOS if self._actif else MESSAGE_EN_PAUSE
+        self._panneau.afficher_repos(message)
+        if self._etat is not Etat.REPOS:
+            self._aller_vers(Etat.REPOS)
 
     def poser_question(self) -> None:
-        """Choisit un extrait et l'affiche. Sans extrait, rien ne se passe."""
-        if self._etat not in (Etat.MASQUEE, Etat.INVITATION, Etat.RETOUR):
+        """Choisit un extrait et l'affiche."""
+        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR):
             return
 
+        self._panneau.ancrer(self._barre.zone())
         extrait = self._selecteur.choisir(
             self._historique.identifiants_deja_vus(), self._detecteur.projet_actif()
         )
+        self._definir_attente(False)
+
         if extrait is None:
-            self._sur_rejet_invitation()
+            self._panneau.afficher_repos(MESSAGE_SANS_EXTRAIT)
+            if self._etat is not Etat.REPOS:
+                self._aller_vers(Etat.REPOS)
             return
 
-        self._bulle.masquer()
         self._extrait_courant = extrait
-        self._fenetre.afficher_question(extrait)
+        self._panneau.afficher_question(extrait)
         self._aller_vers(Etat.QUESTION)
-
-    def _sur_rejet_invitation(self) -> None:
-        """L'invitation est écartée, ou s'est effacée toute seule."""
-        if self._etat is not Etat.INVITATION:
-            return
-        self._bulle.masquer()
-        self._aller_vers(Etat.MASQUEE)
-
-    def _sur_detection_simulee(self) -> None:
-        """Le menu passe par le détecteur, pas par un raccourci interne.
-
-        Cela garde un seul chemin d'entrée dans le cycle, celui qui servira
-        aussi à la détection automatique.
-        """
-        if hasattr(self._detecteur, "demander_question"):
-            self._detecteur.demander_question()
 
     def _sur_reponse(self, reponse: str) -> None:
         if self._etat is not Etat.QUESTION or self._extrait_courant is None:
             return
 
         self._aller_vers(Etat.EVALUATION)
-        self._fenetre.afficher_attente()
+        self._panneau.afficher_attente()
 
         self._jeton_evaluation += 1
         jeton = self._jeton_evaluation
@@ -209,29 +231,35 @@ class Orchestrateur(QObject):
         self._historique.enregistrer_reponse(
             self._extrait_courant, reponse, evaluation
         )
-        self._fenetre.afficher_retour(evaluation)
+        self._panneau.afficher_retour(evaluation)
         self._aller_vers(Etat.RETOUR)
 
     def _sur_passage(self) -> None:
         if self._etat is not Etat.QUESTION or self._extrait_courant is None:
             return
         self._historique.enregistrer_passage(self._extrait_courant)
-        self._terminer()
+        self._extrait_courant = None
+        self._afficher_repos()
 
     def _sur_suite(self) -> None:
         if self._etat is not Etat.RETOUR:
             return
-        self._terminer()
+        self._extrait_courant = None
+        self._afficher_repos()
 
-    def _sur_masquage(self) -> None:
-        """Esc : on masque et on n'enregistre rien, même en pleine évaluation."""
-        if self._etat is Etat.MASQUEE:
+    def fermer(self) -> None:
+        """Referme le panneau sans rien enregistrer."""
+        if self._etat is Etat.FERME:
             return
         self._jeton_evaluation += 1
-        self._terminer()
-
-    def _terminer(self) -> None:
         self._extrait_courant = None
-        self._bulle.masquer()
-        self._fenetre.masquer()
-        self._aller_vers(Etat.MASQUEE)
+        self._aller_vers(Etat.FERME)
+        self._panneau.fermer()
+
+    def _sur_masque(self) -> None:
+        """Le panneau a disparu de lui-même, macOS l'ayant mis en retrait."""
+        if self._etat is Etat.FERME:
+            return
+        self._jeton_evaluation += 1
+        self._extrait_courant = None
+        self._aller_vers(Etat.FERME)

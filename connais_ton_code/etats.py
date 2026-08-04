@@ -1,4 +1,4 @@
-"""Le cycle d'états de la fenêtre.
+"""Le cycle d'états du panneau.
 
 Un seul état est actif à la fois et toutes les transitions passent par
 l'orchestrateur : l'interface ne décide jamais seule de changer d'état, elle
@@ -13,32 +13,31 @@ from enum import Enum, auto
 class Etat(Enum):
     """Les états du cycle."""
 
-    MASQUEE = auto()
-    """État par défaut : rien à l'écran, on attend une détection."""
+    FERME = auto()
+    """État par défaut : seule l'icône de la barre de menus est visible."""
 
-    INVITATION = auto()
-    """Une session vient de démarrer : une bulle propose de répondre."""
+    REPOS = auto()
+    """Le panneau est ouvert mais aucune question n'est posée."""
 
     QUESTION = auto()
     """Un extrait est affiché, la saisie est ouverte."""
 
     EVALUATION = auto()
-    """La réponse est partie à l'évaluateur, l'interface reste utilisable."""
+    """La réponse est partie à l'évaluateur, le panneau reste utilisable."""
 
     RETOUR = auto()
     """Le verdict est affiché, on attend le passage à la suite."""
 
 
 # Une transition non listée ici est un bug de l'orchestrateur, pas un cas à
-# gérer silencieusement : la table sert d'assertion.
+# gérer silencieusement : la table sert d'assertion. Tous les états mènent à
+# FERME, parce que fermer le panneau doit toujours être possible.
 TRANSITIONS_AUTORISEES: dict[Etat, frozenset[Etat]] = {
-    # Depuis Masquée, la question directe court-circuite l'invitation :
-    # c'est le chemin de la barre de menus, où la demande est explicite.
-    Etat.MASQUEE: frozenset({Etat.INVITATION, Etat.QUESTION}),
-    Etat.INVITATION: frozenset({Etat.QUESTION, Etat.MASQUEE}),
-    Etat.QUESTION: frozenset({Etat.EVALUATION, Etat.MASQUEE}),
-    Etat.EVALUATION: frozenset({Etat.RETOUR, Etat.MASQUEE}),
-    Etat.RETOUR: frozenset({Etat.MASQUEE, Etat.QUESTION}),
+    Etat.FERME: frozenset({Etat.REPOS, Etat.QUESTION}),
+    Etat.REPOS: frozenset({Etat.QUESTION, Etat.FERME}),
+    Etat.QUESTION: frozenset({Etat.EVALUATION, Etat.REPOS, Etat.FERME}),
+    Etat.EVALUATION: frozenset({Etat.RETOUR, Etat.FERME}),
+    Etat.RETOUR: frozenset({Etat.REPOS, Etat.QUESTION, Etat.FERME}),
 }
 
 

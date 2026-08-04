@@ -1,9 +1,10 @@
-"""Réglages visuels communs aux fenêtres flottantes.
+"""Réglages visuels du panneau.
 
 Le parti pris est macOS : un panneau sombre sans cadre, coins arrondis, une
-ombre douce, et rien qui clignote. Les composants viennent de la version
-gratuite de PyQt6-Fluent-Widgets, mais l'habillage du panneau est fait à la
-main pour éviter le rendu très « Windows 11 » des fenêtres Fluent complètes.
+ombre douce, accroché sous l'icône de la barre de menus. Les composants
+viennent de la version gratuite de PyQt6-Fluent-Widgets, mais l'habillage est
+fait à la main pour éviter le rendu très « Windows 11 » des fenêtres Fluent
+complètes.
 """
 
 from __future__ import annotations
@@ -20,8 +21,8 @@ COULEUR_BORDURE = "rgba(255, 255, 255, 0.10)"
 COULEUR_TEXTE_ATTENUE = "#8a8f98"
 COULEUR_ACCENT = "#4c8dff"
 
-# La fenêtre est sans cadre : l'ombre est dessinée par nous, donc il faut
-# réserver de la marge autour du panneau pour qu'elle ait la place d'exister.
+# Le panneau est sans cadre : l'ombre est dessinée par nous, donc il faut
+# réserver de la marge autour pour qu'elle ait la place d'exister.
 MARGE_OMBRE = 14
 
 
@@ -45,25 +46,17 @@ def _corriger_police_sur_macos() -> None:
     setFontFamilies([".AppleSystemUIFont", "Helvetica Neue"])
 
 
-def configurer_fenetre_flottante(fenetre: QWidget) -> None:
-    """Applique les propriétés de fenêtre flottante qui ne vole pas le focus.
+def configurer_panneau(panneau: QWidget) -> None:
+    """Applique les propriétés du panneau flottant.
 
-    Trois réglages font tout le travail sur macOS :
-    - `Tool` crée un NSPanel, qui flotte au-dessus sans activer l'application ;
-    - `WA_ShowWithoutActivating` empêche l'affichage de rendre la fenêtre
-      active, donc le clavier reste au terminal ;
-    - `WA_MacAlwaysShowToolWindow` annule le comportement par défaut des
-      panneaux macOS, qui disparaissent dès que l'application perd le focus,
-      ce qui masquerait la question au moment précis où elle doit rester là.
+    `Tool` en fait un panneau utilitaire, qui flotte au-dessus des fenêtres de
+    l'application et s'efface quand on passe à autre chose. C'est le
+    comportement natif d'un panneau de barre de menus, et il n'est pas
+    contrarié : le panneau prend le focus quand on l'ouvre, et disparaît quand
+    on retourne travailler ailleurs.
     """
-    fenetre.setWindowFlags(
-        Qt.WindowType.Tool
-        | Qt.WindowType.FramelessWindowHint
-        | Qt.WindowType.WindowStaysOnTopHint
-    )
-    fenetre.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-    fenetre.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
-    fenetre.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    panneau.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+    panneau.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
 
 def style_panneau(rayon: int = 10) -> str:

@@ -7,6 +7,11 @@ build/
 dist/
 .DS_Store
 
+# Le paquet est fabriqué par outils/creer_app.py et contient des chemins
+# propres à la machine : il se refait, il ne se versionne pas.
+KnowYourCode.app/
+*.iconset/
+
 # Une clé d'API n'a rien à faire ici, même par accident
 .env
 cle_mistral

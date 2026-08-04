@@ -8,30 +8,24 @@ import sys
 from PyQt6.QtCore import QThreadPool, QTimer
 from PyQt6.QtWidgets import QApplication
 
-from .affichage import amorcer
 from .apparence import appliquer_theme_sombre
 from .barre_menu import BarreMenu
 from .detecteur import Detecteur, DetecteurClaudeCode, DetecteurFactice
 from .evaluateur import Evaluateur, EvaluateurFactice, EvaluateurMistral, cle_mistral
-from .fenetre import FenetreFlottante
 from .historique import Historique
-from .invitation import BulleInvitation
 from .orchestrateur import Orchestrateur
-from .placement import coin_haut_droite, restaurer_ou_placer
+from .panneau import Panneau
 from .reglages import Reglages
 from .selecteur import Selecteur, SelecteurFactice, SelecteurProjet
 
 
-def _passer_en_application_accessoire() -> None:
-    """Retire l'icône du Dock et la barre de menus sur macOS.
+def _mode_barre_de_menus() -> None:
+    """Fait de l'application un utilitaire de barre de menus.
 
-    Une application « accessoire » ne devient jamais active toute seule, ce
-    qui est la deuxième moitié de la promesse de ne pas voler le focus : sans
-    ça, le simple lancement fait basculer macOS sur notre processus. Elle peut
-    toujours prendre le focus si l'utilisateur clique dedans.
-
-    L'appel doit venir après la création du QApplication, sinon Qt repasse en
-    application classique en s'initialisant.
+    Une application « accessoire » n'a ni icône au Dock ni barre de menus
+    propre : elle vit uniquement dans son icône en haut de l'écran, comme les
+    utilitaires du système. Elle peut toujours passer au premier plan quand on
+    clique dessus.
     """
     if sys.platform != "darwin":
         return
@@ -96,52 +90,28 @@ def construire(application: QApplication, factice: bool = False) -> Orchestrateu
     reglages = Reglages()
     historique = Historique()
 
-    fenetre = FenetreFlottante()
-    restaurer_ou_placer(fenetre, reglages, "fenetre")
-    amorcer(fenetre)
-
-    # La bulle est toujours placée par l'application : elle apparaît sous
-    # l'icône qui l'a déclenchée, et se déplacer n'aurait pas de sens pour
-    # quelque chose qui s'efface en quinze secondes.
-    bulle = BulleInvitation()
-    bulle.move(coin_haut_droite(bulle))
-    amorcer(bulle)
+    panneau = Panneau()
+    panneau.sortie_demandee.connect(application.quit)
 
     barre = BarreMenu(application)
-    barre.fermeture_demandee.connect(application.quit)
     barre.show()
 
     orchestrateur = Orchestrateur(
-        fenetre=fenetre,
-        bulle=bulle,
+        panneau=panneau,
+        barre=barre,
         detecteur=_choisir_detecteur(factice),
         selecteur=_choisir_selecteur(factice),
         evaluateur=_choisir_evaluateur(factice),
         historique=historique,
         reglages=reglages,
-        barre=barre,
         parent=application,
     )
-    # La pause survit au redémarrage : on la rétablit avant de sonder.
-    orchestrateur.definir_actif(reglages.detection_active())
     orchestrateur.demarrer()
 
-    # Les fenêtres sont gardées vivantes par l'orchestrateur, qui appartient
-    # à l'application ; sans cela le ramasse-miettes les ferait disparaître.
+    # Le panneau est gardé vivant par l'orchestrateur, qui appartient à
+    # l'application ; et le refermer ne doit pas arrêter le programme.
     application.setQuitOnLastWindowClosed(False)
     return orchestrateur
-
-
-def lancer() -> int:
-    application = QApplication(sys.argv)
-    application.setApplicationName("KnowYourCode")
-    _passer_en_application_accessoire()
-    _autoriser_ctrl_c(application)
-
-    construire(application)
-    code = application.exec()
-    attendre_les_evaluations()
-    return code
 
 
 def attendre_les_evaluations(delai_ms: int = 3000) -> None:
@@ -153,3 +123,15 @@ def attendre_les_evaluations(delai_ms: int = 3000) -> None:
     d'erreur sans intérêt.
     """
     QThreadPool.globalInstance().waitForDone(delai_ms)
+
+
+def lancer() -> int:
+    application = QApplication(sys.argv)
+    application.setApplicationName("KnowYourCode")
+    _mode_barre_de_menus()
+    _autoriser_ctrl_c(application)
+
+    construire(application)
+    code = application.exec()
+    attendre_les_evaluations()
+    return code

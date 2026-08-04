@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Vérification de bout en bout : le cycle d'états et le non-vol du focus.
+"""Vérification de bout en bout : le repérage des fonctions et le cycle du panneau.
 
-Le scénario reproduit la situation réelle : l'application tourne pendant qu'on
-travaille ailleurs, une session démarre, l'invitation apparaît, on répond, on
-lit le retour. Pendant tout ce temps le clavier doit rester à l'application
-qui l'avait.
+Le scénario suit le chemin réel : une session est détectée, une notification
+part, l'utilisateur ouvre le panneau quand ça l'arrange, répond, lit le
+retour, referme.
 
 Le script se ferme tout seul et rend un code de sortie non nul si une des
-vérifications échoue.
+vérifications échoue. Il ouvre le panneau à l'écran et prend le focus pendant
+quelques secondes : c'est normal, il se sert de l'interface comme un
+utilisateur.
 
     python verifier.py
 """
 
 from __future__ import annotations
 
-import ctypes
 import json
 import os
 import sys
@@ -25,14 +25,12 @@ import tempfile
 DOSSIER_TEST = tempfile.mkdtemp(prefix="knowyourcode-verif-")
 os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 
-from PyQt6.QtCore import Qt, QTimer  # noqa: E402
-from PyQt6.QtTest import QTest  # noqa: E402
+from PyQt6.QtCore import QTimer  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from connais_ton_code.affichage import est_a_l_ecran  # noqa: E402
 from connais_ton_code.application import (  # noqa: E402
     _autoriser_ctrl_c,
-    _passer_en_application_accessoire,
+    _mode_barre_de_menus,
     attendre_les_evaluations,
     construire,
 )
@@ -44,58 +42,6 @@ _constats: list[tuple[bool, str]] = []
 
 def _verifier(condition: bool, description: str) -> None:
     _constats.append((bool(condition), description))
-
-
-def _nous_sommes_au_premier_plan() -> bool | None:
-    """Rend None si la question n'a pas de sens sur cette plateforme."""
-    if sys.platform != "darwin":
-        return None
-    try:
-        from AppKit import NSWorkspace
-    except ImportError:
-        return None
-    devant = NSWorkspace.sharedWorkspace().frontmostApplication()
-    return devant is not None and devant.processIdentifier() == os.getpid()
-
-
-def _panneau_natif(widget):
-    if sys.platform != "darwin":
-        return None
-    try:
-        import objc
-    except ImportError:
-        return None
-    return objc.objc_object(c_void_p=ctypes.c_void_p(int(widget.winId()))).window()
-
-
-def _a_le_clavier(widget) -> bool:
-    """Dit si la fenêtre est celle qui reçoit les frappes.
-
-    On interroge la fenêtre native et pas `QWidget.isActiveWindow()` : Qt
-    tient sa propre comptabilité, faussée par le fait qu'on affiche sans
-    passer par lui.
-    """
-    panneau = _panneau_natif(widget)
-    if panneau is None:
-        return widget.isActiveWindow()
-    return bool(panneau.isKeyWindow())
-
-
-def _le_clic_pourra_donner_le_clavier(widget) -> bool:
-    """Un panneau non activant ne deviendrait jamais la fenêtre clé.
-
-    Autrement dit : la fenêtre n'attrape pas le focus toute seule, mais elle
-    doit pouvoir l'obtenir quand on clique dedans, sinon impossible de taper
-    sa réponse.
-    """
-    panneau = _panneau_natif(widget)
-    if panneau is None:
-        return True
-    masque_non_activant = 1 << 7
-    return (
-        not panneau.styleMask() & masque_non_activant
-        and bool(panneau.canBecomeKeyWindow())
-    )
 
 
 # Le repérage des fonctions TypeScript compte les accolades à la main : c'est
@@ -173,24 +119,24 @@ def main() -> int:
     verifier_extraction()
 
     application = QApplication(sys.argv)
-    _passer_en_application_accessoire()
+    _mode_barre_de_menus()
     _autoriser_ctrl_c(application)
 
     # Les briques réelles dépendent du disque, du réseau et d'une session
     # Claude Code en cours : la vérification ne doit dépendre d'aucun des trois.
     orchestrateur = construire(application, factice=True)
-    fenetre = orchestrateur._fenetre
-    bulle = orchestrateur._bulle
+    panneau = orchestrateur._panneau
     barre = orchestrateur._barre
+    detecteur = orchestrateur._detecteur
 
-    def _entrees_historique() -> list:
+    def _historique() -> list:
         journal = os.path.join(DOSSIER_TEST, "historique.json")
         if not os.path.exists(journal):
             return []
         with open(journal, encoding="utf-8") as fichier:
             return json.load(fichier).get("entrees", [])
 
-    def _reglages_sur_disque() -> dict:
+    def _reglages() -> dict:
         fichier = os.path.join(DOSSIER_TEST, "reglages.json")
         if not os.path.exists(fichier):
             return {}
@@ -198,245 +144,141 @@ def main() -> int:
             return json.load(ouvert)
 
     def demarrage() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.MASQUEE,
-            "au démarrage, l'état est Masquée",
-        )
-        _verifier(not est_a_l_ecran(fenetre), "la fenêtre n'est pas à l'écran")
-        _verifier(not bulle.est_visible(), "la bulle n'est pas à l'écran")
+        _verifier(orchestrateur.etat() is Etat.FERME, "au démarrage, le panneau est fermé")
+        _verifier(not panneau.isVisible(), "rien ne s'affiche au lancement")
         _verifier(barre.isVisible(), "l'icône de la barre de menus est en place")
-        _verifier(
-            _nous_sommes_au_premier_plan() is not True,
-            "le lancement laisse le focus à l'application précédente",
-        )
         _verifier(orchestrateur.est_actif(), "la détection démarre à l'écoute")
-        barre.activation_changee.emit(False)
+        _verifier(
+            "écoute" in barre.toolTip(), "l'infobulle annonce l'état à l'écoute"
+        )
+        detecteur.demander_question()
 
-    def en_pause() -> None:
-        _verifier(not orchestrateur.est_actif(), "le menu met la détection en pause")
+    def apres_detection() -> None:
         _verifier(
-            "pause" in barre.toolTip().lower(),
-            "l'infobulle de l'icône annonce la pause",
+            orchestrateur.question_en_attente(),
+            "une détection met une question en attente",
         )
         _verifier(
-            not barre._action_detection.isEnabled(),
-            "simuler une détection est grisé pendant la pause",
+            orchestrateur.etat() is Etat.FERME,
+            "la détection prévient sans ouvrir le panneau",
         )
+        _verifier(not panneau.isVisible(), "la notification n'ouvre rien à l'écran")
         _verifier(
-            _reglages_sur_disque().get("detection_active") is False,
-            "la pause est écrite sur le disque",
+            "attend" in barre.toolTip(),
+            "l'icône signale elle aussi la question en attente",
         )
-        barre.detection_simulee.emit()
-
-    def pause_sans_effet() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.MASQUEE,
-            "en pause, une détection ne déclenche rien",
-        )
-        _verifier(not bulle.est_visible(), "en pause, aucune bulle n'apparaît")
-        barre.activation_changee.emit(True)
-
-    def reprise() -> None:
-        _verifier(orchestrateur.est_actif(), "le menu remet la détection à l'écoute")
-        _verifier(
-            _reglages_sur_disque().get("detection_active") is True,
-            "la reprise est écrite sur le disque",
-        )
-
-    def invitation() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.INVITATION,
-            "une détection ouvre l'état Invitation",
-        )
-        _verifier(bulle.est_visible(), "la bulle d'invitation est à l'écran")
-        _verifier(
-            not est_a_l_ecran(fenetre),
-            "l'invitation n'ouvre pas encore la question",
-        )
-        _verifier(
-            _nous_sommes_au_premier_plan() is not True,
-            "l'invitation ne prend pas le focus",
-        )
-        bulle.rejet_demande.emit()
-
-    def apres_rejet() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.MASQUEE, "une invitation écartée referme tout"
-        )
-        _verifier(not bulle.est_visible(), "la bulle écartée quitte l'écran")
-        _verifier(
-            _entrees_historique() == [],
-            "une invitation écartée ne consomme aucun extrait",
-        )
-        barre.detection_simulee.emit()
-
-    def acceptation() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.INVITATION,
-            "une deuxième détection réarme l'invitation",
-        )
-        bulle.ouverture_demandee.emit()
+        orchestrateur.ouvrir()
 
     def question() -> None:
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "accepter l'invitation ouvre la question",
+            "ouvrir le panneau sert la question qui attendait",
         )
-        _verifier(not bulle.est_visible(), "la bulle s'efface derrière la question")
-        _verifier(est_a_l_ecran(fenetre), "la fenêtre de question est à l'écran")
+        _verifier(panneau.isVisible(), "le panneau est visible")
         _verifier(
-            _nous_sommes_au_premier_plan() is not True,
-            "l'affichage de la question ne prend pas le focus",
-        )
-        _verifier(
-            not _a_le_clavier(fenetre),
-            "la fenêtre affichée ne reçoit pas les frappes clavier",
+            not orchestrateur.question_en_attente(),
+            "la question en attente est consommée",
         )
         _verifier(
-            QApplication.focusWidget() is None,
-            "aucun widget n'a capté le clavier",
+            "attend" not in barre.toolTip(),
+            "l'icône cesse de signaler une attente",
         )
         _verifier(
-            _le_clic_pourra_donner_le_clavier(fenetre),
-            "un clic pourra donner le clavier à la fenêtre",
-        )
-        _verifier(
-            fenetre._etiquette_fonction.text() != "",
+            panneau._etiquette_fonction.text() != "",
             "le nom de la fonction est affiché",
         )
         _verifier(
-            "<span" in fenetre._zone_code.toHtml(),
+            "<span" in panneau._zone_code.toHtml(),
             "le code est affiché avec coloration syntaxique",
         )
-        fenetre._zone_reponse.setPlainText(
-            "Cette fonction regroupe les évènements par journée locale."
+        _verifier(
+            panneau.pos().y() < 60,
+            "le panneau s'ouvre en haut, sous la barre de menus",
         )
-        fenetre._bouton_repondre.click()
+        panneau._zone_reponse.setPlainText("Elle regroupe les évènements par jour.")
+        panneau._bouton_repondre.click()
 
     def evaluation() -> None:
         _verifier(
             orchestrateur.etat() is Etat.EVALUATION,
             "la réponse fait passer en état Évaluation",
         )
-        _verifier(
-            est_a_l_ecran(fenetre),
-            "la fenêtre reste affichée pendant l'évaluation",
-        )
-        _verifier(
-            _nous_sommes_au_premier_plan() is not True,
-            "l'évaluation ne prend pas le focus",
-        )
+        _verifier(panneau.isVisible(), "le panneau reste ouvert pendant l'évaluation")
 
     def retour() -> None:
         _verifier(
-            orchestrateur.etat() is Etat.RETOUR,
-            "l'évaluation aboutit à l'état Retour",
+            orchestrateur.etat() is Etat.RETOUR, "l'évaluation aboutit à l'état Retour"
+        )
+        _verifier(len(_historique()) == 1, "la réponse est enregistrée dans l'historique")
+        panneau._bouton_suivant.click()
+
+    def repos() -> None:
+        _verifier(orchestrateur.etat() is Etat.REPOS, "Suivant ramène au repos")
+        _verifier(panneau.isVisible(), "le panneau reste ouvert au repos")
+        panneau.fermeture_demandee.emit()
+
+    def ferme() -> None:
+        _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
+        _verifier(not panneau.isVisible(), "le panneau a bien disparu")
+        _verifier(len(_historique()) == 1, "refermer n'enregistre rien de plus")
+        panneau.activation_changee.emit(False)
+
+    def en_pause() -> None:
+        _verifier(not orchestrateur.est_actif(), "l'interrupteur met en pause")
+        _verifier("pause" in barre.toolTip(), "l'infobulle annonce la pause")
+        _verifier(
+            _reglages().get("detection_active") is False,
+            "la pause est écrite sur le disque",
+        )
+        detecteur.demander_question()
+
+    def pause_sans_effet() -> None:
+        _verifier(
+            not orchestrateur.question_en_attente(),
+            "en pause, une détection ne met rien en attente",
+        )
+        _verifier(orchestrateur.etat() is Etat.FERME, "en pause, rien ne s'ouvre")
+        orchestrateur.ouvrir()
+
+    def repos_en_pause() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.REPOS,
+            "le panneau s'ouvre quand même à la demande",
         )
         _verifier(
-            len(_entrees_historique()) == 1,
-            "la réponse est enregistrée dans l'historique",
+            "pause" in panneau._message_repos.text().lower(),
+            "le panneau dit que la détection est en pause",
         )
-        fenetre._bouton_suivant.click()
+        panneau.question_demandee.emit()
 
-    def suite() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.MASQUEE, "Suivant ramène à l'état Masquée"
-        )
-        _verifier(not est_a_l_ecran(fenetre), "la fenêtre est retirée de l'écran")
-        barre.question_demandee.emit()
-
-    def echappement() -> None:
+    def question_manuelle() -> None:
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "le menu pose une question sans passer par l'invitation",
+            "en pause, on peut toujours demander une question",
         )
-        QTest.keyClick(fenetre._zone_reponse, Qt.Key.Key_Escape)
-
-    def apres_echappement() -> None:
-        _verifier(orchestrateur.etat() is Etat.MASQUEE, "Esc masque la fenêtre")
-        _verifier(not est_a_l_ecran(fenetre), "Esc retire la fenêtre de l'écran")
-        _verifier(
-            len(_entrees_historique()) == 1,
-            "Esc n'enregistre rien dans l'historique",
-        )
-        _verifier(
-            _nous_sommes_au_premier_plan() is not True,
-            "jusqu'ici l'application n'a jamais pris le premier plan",
-        )
-        print("La dernière étape prend volontairement le focus une seconde,")
-        print("pour vérifier qu'un clic permet bien de répondre au clavier.")
-        barre.question_demandee.emit()
-
-    def clic_simule() -> None:
-        """Reproduit le clic de l'utilisateur dans la fenêtre."""
-        _verifier(
-            orchestrateur.etat() is Etat.QUESTION,
-            "une dernière question s'ouvre pour l'essai au clavier",
-        )
-        try:
-            from AppKit import NSApplication
-        except ImportError:
-            return
-        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        panneau = _panneau_natif(fenetre)
-        if panneau is not None:
-            panneau.makeKeyWindow()
-        fenetre._zone_reponse.setFocus()
-
-    def raccourci() -> None:
-        _verifier(_a_le_clavier(fenetre), "après le clic, la fenêtre a le clavier")
-        _verifier(
-            QApplication.focusWidget() is fenetre._zone_reponse,
-            "le curseur est dans la zone de réponse",
-        )
-        fenetre._zone_reponse.setPlainText("Réponse envoyée au clavier.")
-        # Sur macOS, Qt fait correspondre ControlModifier à la touche Cmd.
-        QTest.keyClick(
-            fenetre._zone_reponse,
-            Qt.Key.Key_Return,
-            Qt.KeyboardModifier.ControlModifier,
-        )
+        panneau.activation_changee.emit(True)
 
     def fin() -> None:
+        _verifier(orchestrateur.est_actif(), "l'interrupteur remet à l'écoute")
         _verifier(
-            orchestrateur.etat() is Etat.EVALUATION,
-            "Cmd+Entrée envoie la réponse",
-        )
-        fenetre.masquage_demande.emit()
-
-    def restitution() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.MASQUEE,
-            "Esc interrompt l'évaluation en cours",
-        )
-        _verifier(
-            len(_entrees_historique()) == 1,
-            "une évaluation interrompue ne laisse pas de trace",
-        )
-        _verifier(
-            _nous_sommes_au_premier_plan() is not True,
-            "en se masquant, la fenêtre rend le clavier à l'application d'avant",
+            _reglages().get("detection_active") is True,
+            "la reprise est écrite sur le disque",
         )
         application.quit()
 
     for delai, etape in (
-        (700, demarrage),
-        (1000, en_pause),
-        (2300, pause_sans_effet),
-        (2600, reprise),
-        (3700, invitation),
-        (4000, apres_rejet),
-        (5100, acceptation),
-        (5400, question),
-        (5700, evaluation),
-        (6900, retour),
-        (7300, suite),
-        (7600, echappement),
-        (8000, apres_echappement),
-        (8300, clic_simule),
-        (8800, raccourci),
-        (9100, fin),
-        (9600, restitution),
+        (600, demarrage),
+        (1700, apres_detection),
+        (2000, question),
+        (2300, evaluation),
+        (3500, retour),
+        (3800, repos),
+        (4100, ferme),
+        (4400, en_pause),
+        (5600, pause_sans_effet),
+        (5900, repos_en_pause),
+        (6200, question_manuelle),
+        (6500, fin),
     ):
         QTimer.singleShot(delai, etape)
 
