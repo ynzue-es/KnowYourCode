@@ -69,7 +69,7 @@ def ecrire_icone(destination: Path) -> None:
     shutil.rmtree(jeu)
 
 
-def ecrire_plist(chemin: Path) -> None:
+def ecrire_plist(chemin: Path, paquets: Path, amorce: Path) -> None:
     contenu = {
         "CFBundleName": NOM,
         "CFBundleDisplayName": NOM,
@@ -83,31 +83,55 @@ def ecrire_plist(chemin: Path) -> None:
         # Utilitaire de barre de menus : pas d'icône au Dock, pas de barre de
         # menus propre. C'est le pendant déclaratif du mode accessoire.
         "LSUIElement": True,
+        # L'exécutable du paquet est l'interpréteur lui-même, qui ne reçoit
+        # aucun argument de la part du système : c'est par l'environnement
+        # qu'on lui indique quoi charger. Python importe `sitecustomize` tout
+        # seul au démarrage, et c'est ce module qui lance l'application.
+        "LSEnvironment": {"PYTHONPATH": f"{amorce}:{paquets}"},
     }
     chemin.write_bytes(plistlib.dumps(contenu))
 
 
-def ecrire_lanceur(chemin: Path, paquets: Path) -> None:
-    """Écrit le script de lancement, chemins du dépôt inscrits en dur.
+def ecrire_amorce(dossier: Path) -> None:
+    """Écrit le module qui démarre l'application, chemins inscrits en dur.
 
-    Le venv est désigné par `PYTHONPATH` plutôt que par un `pyvenv.cfg` : posé
-    à côté de l'exécutable, ce dernier ferait croire à Python que la racine du
-    venv est `Contents/MacOS`, où il n'y a aucune bibliothèque.
+    Un script shell qui `exec`ait l'interpréteur ne convenait pas : le système
+    perd alors la trace de l'application qu'il vient de lancer, et son icône
+    de barre de menus n'est jamais placée. En faisant de l'interpréteur
+    l'exécutable du paquet, il n'y a plus de changement de programme en cours
+    de route. Reste à lui dire quoi exécuter, puisque le système ne lui passe
+    aucun argument : `sitecustomize` est importé d'office par Python, c'est
+    donc là que l'application démarre.
     """
-    chemin.write_text(
-        "#!/bin/sh\n"
-        "# Fabriqué par outils/creer_app.py, ne pas modifier à la main.\n"
-        f'cd "{RACINE}" || exit 1\n'
-        f'PYTHONPATH="{paquets}"\n'
-        "export PYTHONPATH\n"
-        # Lancée d'un double-clic, l'application n'a aucun terminal où se
-        # plaindre : sans ce journal, une erreur de démarrage est invisible.
-        'JOURNAL="$HOME/.knowyourcode/journal.log"\n'
-        'mkdir -p "$(dirname "$JOURNAL")"\n'
-        'exec "$(dirname "$0")/python" -m connais_ton_code >>"$JOURNAL" 2>&1\n',
+    dossier.mkdir(parents=True, exist_ok=True)
+    (dossier / "sitecustomize.py").write_text(
+        '"""Amorce du paquet. Fabriqué par outils/creer_app.py."""\n'
+        "\n"
+        "import os\n"
+        "import sys\n"
+        "\n"
+        f'RACINE = "{RACINE}"\n'
+        "\n"
+        "\n"
+        "def _demarrer():\n"
+        "    os.chdir(RACINE)\n"
+        "    sys.path.insert(0, RACINE)\n"
+        "\n"
+        "    # Lancée d'un double-clic, l'application n'a aucun terminal où se\n"
+        "    # plaindre : sans ce journal, une erreur de démarrage est invisible.\n"
+        "    journal = os.path.expanduser('~/.knowyourcode/journal.log')\n"
+        "    os.makedirs(os.path.dirname(journal), exist_ok=True)\n"
+        "    sortie = open(journal, 'a', buffering=1, encoding='utf-8')\n"
+        "    sys.stdout = sys.stderr = sortie\n"
+        "\n"
+        "    from connais_ton_code.application import lancer\n"
+        "\n"
+        "    raise SystemExit(lancer())\n"
+        "\n"
+        "\n"
+        "_demarrer()\n",
         encoding="utf-8",
     )
-    chemin.chmod(0o755)
 
 
 def _interpreteur_reel() -> Path:
@@ -133,7 +157,7 @@ def copier_interpreteur(destination: Path) -> Path:
     considérerait que l'exécutable vit hors du paquet, ce qui lui ferait
     perdre l'identité qu'on cherche justement à lui donner.
     """
-    copie = destination / "python"
+    copie = destination / NOM
     shutil.copy2(_interpreteur_reel(), copie)
     copie.chmod(0o755)
 
@@ -160,9 +184,10 @@ def main() -> int:
     binaires.mkdir(parents=True)
     ressources.mkdir(parents=True)
 
-    ecrire_plist(paquet / "Contents" / "Info.plist")
+    amorce = ressources / "amorce"
     paquets = copier_interpreteur(binaires)
-    ecrire_lanceur(binaires / NOM, paquets)
+    ecrire_amorce(amorce)
+    ecrire_plist(paquet / "Contents" / "Info.plist", paquets, amorce)
     ecrire_icone(ressources / f"{NOM}.icns")
 
     # Sans cette secousse, le Finder garde en cache l'icône du paquet précédent.
