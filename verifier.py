@@ -412,21 +412,24 @@ def main() -> int:
         _verifier(orchestrateur.etat() is Etat.REPOS, "Suivant ramène au repos")
         _verifier(panneau.isVisible(), "le panneau reste ouvert au repos")
         # Une réponse vient d'être enregistrée : c'est le bon moment pour
-        # vérifier que le tableau de bord a quelque chose à montrer.
-        orchestrateur.afficher_tableau()
+        # vérifier que la grande fenêtre a quelque chose à montrer.
+        panneau.fenetre_demandee.emit()
 
-    def tableau() -> None:
+    def grande_fenetre() -> None:
+        fenetre = orchestrateur._fenetre
+        _verifier(fenetre.isVisible(), "l'icône du panneau ouvre la grande fenêtre")
         _verifier(
-            orchestrateur.etat() is Etat.TABLEAU,
-            "ouvrir le tableau de bord passe en état Tableau",
+            orchestrateur.etat() is Etat.REPOS,
+            "la grande fenêtre n'interrompt pas le cycle de l'exercice",
         )
-        _verifier(panneau.isVisible(), "le panneau reste visible sur le tableau de bord")
+        _verifier(panneau.isVisible(), "le panneau reste ouvert derrière elle")
+        fenetre.close()
         panneau.question_demandee.emit()
 
     def apres_tableau() -> None:
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "depuis le tableau de bord, on peut revenir à une question",
+            "après la grande fenêtre, on revient à une question",
         )
         _verifier(panneau.isVisible(), "le panneau reste ouvert en revenant à la question")
         panneau._bouton_passer.click()
@@ -459,7 +462,7 @@ def main() -> int:
         (1500, evaluation),
         (3400, retour),
         (3700, repos),
-        (3900, tableau),
+        (3900, grande_fenetre),
         (4100, apres_tableau),
         (4300, apres_passage),
         (4600, ferme),

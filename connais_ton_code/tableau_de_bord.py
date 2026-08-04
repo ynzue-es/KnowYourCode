@@ -38,7 +38,9 @@ class TableauDeBord(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(LARGEUR, HAUTEUR)
+        # Taille minimale et non figée : le même widget sert dans le panneau
+        # étroit et dans la grande fenêtre, où il doit occuper la place.
+        self.setMinimumSize(LARGEUR, HAUTEUR)
         self._construire()
 
     # ------------------------------------------------------------------

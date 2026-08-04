@@ -10,7 +10,14 @@ from __future__ import annotations
 import sys
 
 from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QGuiApplication, QHideEvent, QKeyEvent, QKeySequence, QShortcut
+from PyQt6.QtGui import (
+    QGuiApplication,
+    QHideEvent,
+    QIcon,
+    QKeyEvent,
+    QKeySequence,
+    QShortcut,
+)
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -27,9 +34,7 @@ from qfluentwidgets import (
     PlainTextEdit,
     PrimaryPushButton,
     PushButton,
-    SegmentedWidget,
     SmoothScrollArea,
-    SwitchButton,
     StrongBodyLabel,
     TextEdit,
     TransparentToolButton,
@@ -43,13 +48,10 @@ from .apparence import (
 from .coloration import COULEUR_FOND_CODE, colorer
 from .logo import pixmap_marque
 from .modeles import Evaluation, Extrait
-from .statistiques import Statistiques
-from .tableau_de_bord import TableauDeBord
 
 LARGEUR = 620
 HAUTEUR_QUESTION = 500
 HAUTEUR_REPOS = 170
-HAUTEUR_TABLEAU = 560
 
 # Hauteur figée du bas du panneau, sinon la zone de code se redimensionne au
 # moindre mot tapé et le regard perd sa place. Repos et Retour s'en écartent
@@ -70,10 +72,6 @@ _INDEX_REPOS = 0
 _INDEX_SAISIE = 1
 _INDEX_ATTENTE = 2
 _INDEX_RETOUR = 3
-
-# Identifiants des deux sections de la navigation d'entête.
-_SECTION_QUESTION = "question"
-_SECTION_TABLEAU = "tableau"
 
 
 def _activer_application() -> None:
@@ -100,9 +98,8 @@ class Panneau(QWidget):
     passage_demande = pyqtSignal()
     suite_demandee = pyqtSignal()
     question_demandee = pyqtSignal()
-    tableau_demande = pyqtSignal()
+    fenetre_demandee = pyqtSignal()
     fermeture_demandee = pyqtSignal()
-    rappel_change = pyqtSignal(bool)
     sortie_demandee = pyqtSignal()
     masque = pyqtSignal()
 
@@ -141,11 +138,7 @@ class Panneau(QWidget):
         interieur.addWidget(self._localisation)
         interieur.addWidget(self._construire_zone_code(), stretch=1)
         interieur.addWidget(self._construire_zone_basse())
-        self._defilement_tableau = self._construire_tableau()
-        interieur.addWidget(self._defilement_tableau, stretch=1)
         interieur.addWidget(self._construire_pied())
-
-        self._definir_section_active(_SECTION_QUESTION)
 
     def _construire_entete(self) -> QHBoxLayout:
         ligne = QHBoxLayout()
@@ -157,12 +150,6 @@ class Panneau(QWidget):
         ligne.addSpacing(-2)
 
         ligne.addWidget(StrongBodyLabel("KnowYourCode", self._cadre))
-
-        self._navigation = SegmentedWidget(self._cadre)
-        self._navigation.addItem(_SECTION_QUESTION, "Question")
-        self._navigation.addItem(_SECTION_TABLEAU, "Progression")
-        self._navigation.currentItemChanged.connect(self._sur_changement_section)
-        ligne.addWidget(self._navigation)
 
         self._etiquette_etat = CaptionLabel("", self._cadre)
         self._etiquette_etat.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
@@ -213,21 +200,6 @@ class Panneau(QWidget):
         self._pile.addWidget(self._construire_page_attente())
         self._pile.addWidget(self._construire_page_retour())
         return self._pile
-
-    def _construire_tableau(self) -> QWidget:
-        # `TableauDeBord` a sa propre taille figée : la mettre dans une zone
-        # de défilement évite qu'elle impose sa hauteur au panneau, exactement
-        # comme `_defilement_retour` le fait déjà pour le verdict.
-        self._tableau = TableauDeBord()
-        defilement = SmoothScrollArea(self._cadre)
-        defilement.setWidget(self._tableau)
-        defilement.setWidgetResizable(False)
-        defilement.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        defilement.setFrameShape(QFrame.Shape.NoFrame)
-        defilement.setStyleSheet("QScrollArea, QWidget { background: transparent; }")
-        defilement.viewport().setStyleSheet("background: transparent;")
-        defilement.setVisible(False)
-        return defilement
 
     def _construire_page_repos(self) -> QWidget:
         page = QWidget(self._pile)
@@ -341,15 +313,12 @@ class Panneau(QWidget):
         ligne.setContentsMargins(0, 6, 0, 0)
         ligne.setSpacing(8)
 
-        self._interrupteur_rappel = SwitchButton(pied)
-        self._interrupteur_rappel.setOnText("Rappel dans Claude Code")
-        self._interrupteur_rappel.setOffText("Rappel désactivé")
-        self._interrupteur_rappel.setToolTip(
-            "Remplace les mots du compteur d'attente de Claude Code. "
-            "Redémarrez Claude Code pour voir le changement."
-        )
-        self._interrupteur_rappel.checkedChanged.connect(self.rappel_change.emit)
-        ligne.addWidget(self._interrupteur_rappel)
+        ouvrir = TransparentToolButton(pied)
+        ouvrir.setIcon(QIcon(pixmap_marque(14)))
+        ouvrir.setFixedSize(30, 26)
+        ouvrir.setToolTip("Progression et réglages")
+        ouvrir.clicked.connect(self.fenetre_demandee.emit)
+        ligne.addWidget(ouvrir)
         ligne.addStretch(1)
 
         quitter = TransparentToolButton(FluentIcon.POWER_BUTTON, pied)
@@ -396,8 +365,6 @@ class Panneau(QWidget):
         self._pile.setVisible(True)
         self._pile.setFixedHeight(HAUTEUR_ZONE_REPOS)
         self._pile.setCurrentIndex(_INDEX_REPOS)
-        self._defilement_tableau.setVisible(False)
-        self._definir_section_active(_SECTION_QUESTION)
         self._afficher(LARGEUR, HAUTEUR_REPOS)
 
     def afficher_question(self, extrait: Extrait) -> None:
@@ -411,8 +378,6 @@ class Panneau(QWidget):
         self._localisation.setVisible(True)
         self._zone_code.setVisible(True)
         self._pile.setVisible(True)
-        self._defilement_tableau.setVisible(False)
-        self._definir_section_active(_SECTION_QUESTION)
 
         self._zone_reponse.clear()
         self._zone_reponse.setReadOnly(False)
@@ -454,53 +419,6 @@ class Panneau(QWidget):
         self._etiquette_score.setText(f"{evaluation.score} / 100")
         self._pile.setFixedHeight(HAUTEUR_ZONE_RETOUR)
         self._pile.setCurrentIndex(_INDEX_RETOUR)
-
-    def afficher_tableau_de_bord(self, statistiques: Statistiques) -> None:
-        """Bascule sur la section Progression et l'ouvre à la bonne taille.
-
-        La zone de code, la localisation et le bas de panneau propres à une
-        question n'ont rien à faire ici : ils sont masqués, comme le fait déjà
-        `afficher_repos` pour ses propres besoins.
-        """
-        self._etiquette_etat.setText("progression")
-        self._tableau.afficher(statistiques)
-
-        self._localisation.setVisible(False)
-        self._zone_code.setVisible(False)
-        self._pile.setVisible(False)
-        self._defilement_tableau.setVisible(True)
-        self._definir_section_active(_SECTION_TABLEAU)
-
-        self._afficher(LARGEUR, HAUTEUR_TABLEAU)
-
-    def definir_rappel(self, installe: bool) -> None:
-        """Aligne l'interrupteur sur l'état réel, sans relancer le signal.
-
-        Les réglages de Claude Code peuvent avoir changé pendant que le
-        panneau était fermé : c'est l'état du fichier qui fait foi, pas ce que
-        l'interrupteur affichait la dernière fois.
-        """
-        self._interrupteur_rappel.blockSignals(True)
-        self._interrupteur_rappel.setChecked(installe)
-        self._interrupteur_rappel.blockSignals(False)
-
-    def _definir_section_active(self, section: str) -> None:
-        """Aligne la navigation sur la section affichée, sans relancer le signal.
-
-        Même précaution que `definir_actif` : cette méthode est aussi
-        appelée depuis les méthodes `afficher_*`, quand c'est l'orchestrateur
-        qui change d'état, et ne doit pas redemander ce qu'il vient de décider.
-        """
-        self._navigation.blockSignals(True)
-        self._navigation.setCurrentItem(section)
-        self._navigation.blockSignals(False)
-
-    def _sur_changement_section(self, section: str) -> None:
-        """Traduit le clic sur la navigation en simple demande, sans rien trancher."""
-        if section == _SECTION_TABLEAU:
-            self.tableau_demande.emit()
-        else:
-            self.question_demandee.emit()
 
     def fermer(self) -> None:
         """Referme le panneau, sans rien conserver de la saisie."""

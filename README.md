@@ -5,9 +5,9 @@
 Clin d'œil au KYC bancaire : connaître son code plutôt que son client.
 
 Un utilitaire de barre de menus pour macOS. Quand vous avez un moment, vous
-ouvrez son panneau : il tire au hasard une fonction du projet en cours et vous
-demande de l'expliquer. Un modèle tiers compare votre explication au code et
-vous dit ce que vous avez oublié.
+ouvrez son panneau : il tire au hasard une fonction du projet sur lequel vous
+travaillez avec Claude Code, et vous demande de l'expliquer. Un modèle tiers
+compare votre explication au code et vous dit ce que vous avez oublié.
 
 Le but n'est pas de noter, c'est de garder la maîtrise d'un code qu'on ne
 relit plus, et de s'entraîner au passage sur Python et TypeScript.
@@ -61,9 +61,9 @@ Plutôt qu'une notification, qui suppose une autorisation du système et
 disparaît en trois secondes, le rappel se glisse là où le regard se pose déjà :
 le compteur d'attente de Claude Code.
 
-L'interrupteur en bas du panneau écrit un bloc `spinnerVerbs` dans
+L'interrupteur des réglages écrit un bloc `spinnerVerbs` dans
 `~/.claude/settings.json`. Pendant que Claude travaille, le terminal affiche
-`<kyc>Révise pendant que je travaille</kyc>`, et une douzaine d'autres.
+`<kyc>🧠 Révise pendant que je travaille</kyc>`, et une douzaine d'autres.
 L'éteindre retire le bloc et rend à Claude Code ses propres verbes. Dans les
 deux sens, le reste du fichier est conservé, et il faut redémarrer Claude Code
 pour voir le changement.
@@ -86,19 +86,18 @@ Elles s'écrivent nues : la balise `<kyc>` est ajoutée à la pose, et toute
 phrase dépassant soixante caractères une fois habillée est écartée, Claude
 Code la couperait au milieu d'un mot.
 
-## L'icône
+## Deux surfaces
 
-L'application n'apparaît pas dans le Dock. Sa seule présence permanente est
-une icône dans la barre de menus, en haut à droite. Un clic ouvre le panneau,
-sous l'icône. Tout s'y trouve : la question, la réponse, le verdict, la
-progression, l'interrupteur du rappel et le bouton pour quitter.
+L'application n'apparaît pas dans le Dock, et rien ne s'ouvre au lancement :
+elle pose son icône dans la barre de menus et attend.
 
-Le panneau a deux sections, choisies par un sélecteur en haut : Question, qui
-porte le cycle décrit ci-dessous, et Progression, qui montre le tableau de
-bord. Le passage de l'une à l'autre n'est permis que depuis Fermé, Repos ou
-Retour : rien n'y est en train de s'écrire, donc rien à perdre. Depuis
-Question ou Évaluation, le choix reste sans effet, une réponse en cours de
-saisie ne doit pas être interrompue par la consultation de statistiques.
+**Le panneau**, sous l'icône, ne contient que l'exercice : le code, la zone de
+réponse, le verdict. On y répond en trente secondes et on retourne travailler.
+
+**La grande fenêtre**, au centre de l'écran, porte ce qu'on consulte en
+s'arrêtant : la progression et les réglages. Elle s'ouvre par l'icône en bas à
+gauche du panneau, et se ferme d'un Esc. Elle ne touche pas au cycle de
+l'exercice : on peut la consulter pendant qu'une question attend sa réponse.
 
 ## Vérification
 
@@ -109,7 +108,7 @@ python verifier.py
 Le script contrôle d'abord le repérage des fonctions et le calcul des
 statistiques, sur des historiques construits à la main plutôt que rejoués
 depuis un fichier, puis déroule un cycle complet dans l'interface : ouverture,
-question, réponse, évaluation, retour, consultation du tableau de bord,
+question, réponse, évaluation, retour, ouverture de la grande fenêtre,
 passage, fermeture. Il ouvre le panneau à l'écran pendant quelques secondes,
 et rend un code de sortie non nul en cas d'échec. Il n'a besoin ni de réseau,
 ni de clé, ni d'une session Claude Code en cours.
@@ -123,12 +122,16 @@ ni de clé, ni d'une session Claude Code en cours.
    une zone de saisie, les boutons Répondre (Cmd+Entrée) et Passer.
 4. **Évaluation** — un indicateur d'attente ; le panneau reste utilisable.
 5. **Retour** — le verdict, ce qui a été oublié, et un bouton Suivant.
-6. **Tableau** — la section Progression : le nombre de réponses, le score
-   moyen et le score récent, la courbe des vingt derniers scores, ce qui
-   revient le plus souvent dans les oublis, les fonctions les moins bien
-   expliquées et la répartition par langage. Tant qu'aucune réponse n'a été
-   donnée, la section dit juste qu'il n'y a encore rien à montrer, plutôt que
-   d'afficher des zéros qui ne diraient rien.
+
+La progression et les réglages ne figurent pas dans ce cycle : ils vivent dans
+la grande fenêtre, qui s'ouvre et se ferme sans rien changer à l'exercice en
+cours.
+
+La progression montre le nombre de réponses, le score moyen et le score
+récent, la courbe des vingt derniers scores, ce qui revient le plus souvent
+dans les oublis, les fonctions les moins bien expliquées et la répartition par
+langage. Tant qu'aucune réponse n'a été donnée, elle dit juste qu'il n'y a
+encore rien à montrer, plutôt que d'afficher des zéros qui ne diraient rien.
 
 Les transitions autorisées sont déclarées dans `etats.py` et vérifiées à
 chaque passage : une transition hors table est traitée comme un bug, pas comme

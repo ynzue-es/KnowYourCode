@@ -32,20 +32,20 @@ BALISE = "kyc"
 # Les phrases sont écrites nues : l'habillage est posé au dernier moment, ce
 # qui permet de le changer sans réécrire les quatorze.
 PHRASES_PAR_DEFAUT = (
-    "Révise pendant que je travaille",
-    "Connais ton code, pas seulement ton client",
-    "Explique une fonction en attendant",
-    "Sais-tu encore ce que fait ce fichier",
-    "Contrôle avec KnowYourCode",
-    "Relis ce que tu ne relis plus",
-    "Une question t'attend en haut à droite",
-    "Reprends la main sur ton code",
-    "Profite de l'attente pour réviser",
-    "Vérifie que tu suis toujours",
-    "Ton code, tu le connais vraiment",
-    "Explique ta dernière fonction en deux minutes",
-    "Ouvre KnowYourCode et prends une question",
-    "Garde la maîtrise de ce que j'écris",
+    "🧠 Révise pendant que je travaille",
+    "🏦 Connais ton code, pas seulement ton client",
+    "💡 Explique une fonction en attendant",
+    "🤔 Sais-tu encore ce que fait ce fichier",
+    "🔍 Contrôle avec KnowYourCode",
+    "📖 Relis ce que tu ne relis plus",
+    "👀 Une question t'attend en haut à droite",
+    "🎯 Reprends la main sur ton code",
+    "⏳ Profite de l'attente pour réviser",
+    "✅ Vérifie que tu suis toujours",
+    "🧩 Ton code, tu le connais vraiment",
+    "⚡️ Explique ta dernière fonction en deux minutes",
+    "🚀 Ouvre KnowYourCode et prends une question",
+    "🛠️ Garde la maîtrise de ce que j'écris",
 )
 
 

@@ -14,10 +14,11 @@ from .barre_menu import BarreMenu
 from .etats import Etat, transition_valide
 from .evaluateur import Evaluateur
 from .historique import Historique
+from . import rappel
+from .fenetre_principale import FenetrePrincipale
 from .modeles import Evaluation, Extrait
 from .panneau import Panneau
 from .projet import Projet
-from . import rappel
 from .selecteur import Selecteur
 from .statistiques import calculer_statistiques
 from .taches import TacheEvaluation
@@ -34,6 +35,7 @@ class Orchestrateur(QObject):
     def __init__(
         self,
         panneau: Panneau,
+        fenetre: FenetrePrincipale,
         barre: BarreMenu,
         projet: Projet,
         selecteur: Selecteur,
@@ -43,6 +45,7 @@ class Orchestrateur(QObject):
     ) -> None:
         super().__init__(parent)
         self._panneau = panneau
+        self._fenetre = fenetre
         self._barre = barre
         self._projet = projet
         self._selecteur = selecteur
@@ -71,9 +74,9 @@ class Orchestrateur(QObject):
         self._panneau.passage_demande.connect(self._sur_passage)
         self._panneau.suite_demandee.connect(self._sur_suite)
         self._panneau.question_demandee.connect(self.poser_question)
-        self._panneau.tableau_demande.connect(self.afficher_tableau)
+        self._panneau.fenetre_demandee.connect(self.afficher_fenetre)
         self._panneau.fermeture_demandee.connect(self.fermer)
-        self._panneau.rappel_change.connect(self._sur_rappel)
+        self._fenetre.rappel_change.connect(self._sur_rappel)
         self._panneau.masque.connect(self._sur_masque)
 
         self._barre.ouverture_demandee.connect(self.ouvrir)
@@ -95,12 +98,11 @@ class Orchestrateur(QObject):
         """
         reussi = rappel.installer() if installe else rappel.retirer()
         if not reussi:
-            self._panneau.definir_rappel(rappel.est_installe())
+            self._fenetre.definir_rappel(rappel.est_installe())
 
     def ouvrir(self) -> None:
         """Le panneau s'ouvre : sur la question qui attendait, ou au repos."""
         self._panneau.ancrer(self._barre.zone())
-        self._panneau.definir_rappel(rappel.est_installe())
 
         if self._etat is not Etat.FERME:
             # Déjà ouvert : on le ramène devant, en le replaçant au passage.
@@ -119,7 +121,7 @@ class Orchestrateur(QObject):
 
     def poser_question(self) -> None:
         """Choisit un extrait et l'affiche."""
-        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR, Etat.TABLEAU):
+        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR):
             return
 
         self._panneau.ancrer(self._barre.zone())
@@ -136,20 +138,15 @@ class Orchestrateur(QObject):
         self._panneau.afficher_question(extrait)
         self._aller_vers(Etat.QUESTION)
 
-    def afficher_tableau(self) -> None:
-        """Calcule les statistiques et bascule le panneau sur le tableau de bord.
+    def afficher_fenetre(self) -> None:
+        """Ouvre la grande fenêtre, sans toucher au cycle de l'exercice.
 
-        Recalculées à chaque ouverture plutôt que gardées en mémoire : la
-        dernière réponse enregistrée doit toujours apparaître, et relire tout
-        l'historique ne coûte rien face à la taille du fichier.
+        La progression et les réglages ne sont pas un état du panneau : on
+        peut les consulter pendant qu'une question attend une réponse, sans
+        rien lui faire perdre.
         """
-        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR):
-            return
-
-        self._panneau.ancrer(self._barre.zone())
-        statistiques = calculer_statistiques(self._historique.entrees())
-        self._panneau.afficher_tableau_de_bord(statistiques)
-        self._aller_vers(Etat.TABLEAU)
+        self._fenetre.definir_rappel(rappel.est_installe())
+        self._fenetre.afficher(calculer_statistiques(self._historique.entrees()))
 
     def _sur_reponse(self, reponse: str) -> None:
         if self._etat is not Etat.QUESTION or self._extrait_courant is None:
