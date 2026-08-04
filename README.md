@@ -61,24 +61,37 @@ Plutôt qu'une notification, qui suppose une autorisation du système et
 disparaît en trois secondes, le rappel se glisse là où le regard se pose déjà :
 le compteur d'attente de Claude Code.
 
-`outils/phrases_attente.py` écrit un bloc `spinnerVerbs` dans
+L'interrupteur en bas du panneau écrit un bloc `spinnerVerbs` dans
 `~/.claude/settings.json`. Pendant que Claude travaille, le terminal affiche
-« Révise pendant que je travaille », « Connais ton code, pas seulement ton
-client », et une douzaine d'autres.
+`<kyc>Révise pendant que je travaille</kyc>`, et une douzaine d'autres.
+L'éteindre retire le bloc et rend à Claude Code ses propres verbes. Dans les
+deux sens, le reste du fichier est conservé, et il faut redémarrer Claude Code
+pour voir le changement.
+
+La même chose en ligne de commande :
 
 ```bash
-python outils/phrases_attente.py
+python outils/phrases_attente.py            # pose le rappel
+python outils/phrases_attente.py --retirer  # le retire
 ```
 
-Le script conserve le reste du fichier et n'écrase que ce bloc. Redémarrez
-Claude Code pour le voir.
+**Pour écrire vos propres phrases**, posez un tableau JSON dans
+`~/.knowyourcode/phrases.json` :
+
+```json
+["Relis avant de valider", "Tu saurais réécrire ça sans moi ?"]
+```
+
+Elles s'écrivent nues : la balise `<kyc>` est ajoutée à la pose, et toute
+phrase dépassant soixante caractères une fois habillée est écartée, Claude
+Code la couperait au milieu d'un mot.
 
 ## L'icône
 
 L'application n'apparaît pas dans le Dock. Sa seule présence permanente est
 une icône dans la barre de menus, en haut à droite. Un clic ouvre le panneau,
 sous l'icône. Tout s'y trouve : la question, la réponse, le verdict, la
-progression et le bouton pour quitter.
+progression, l'interrupteur du rappel et le bouton pour quitter.
 
 Le panneau a deux sections, choisies par un sélecteur en haut : Question, qui
 porte le cycle décrit ci-dessous, et Progression, qui montre le tableau de

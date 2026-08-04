@@ -17,6 +17,7 @@ from .historique import Historique
 from .modeles import Evaluation, Extrait
 from .panneau import Panneau
 from .projet import Projet
+from . import rappel
 from .selecteur import Selecteur
 from .statistiques import calculer_statistiques
 from .taches import TacheEvaluation
@@ -72,6 +73,7 @@ class Orchestrateur(QObject):
         self._panneau.question_demandee.connect(self.poser_question)
         self._panneau.tableau_demande.connect(self.afficher_tableau)
         self._panneau.fermeture_demandee.connect(self.fermer)
+        self._panneau.rappel_change.connect(self._sur_rappel)
         self._panneau.masque.connect(self._sur_masque)
 
         self._barre.ouverture_demandee.connect(self.ouvrir)
@@ -85,9 +87,20 @@ class Orchestrateur(QObject):
             raise RuntimeError(f"Transition interdite : {self._etat} → {etat}")
         self._etat = etat
 
+    def _sur_rappel(self, installe: bool) -> None:
+        """Pose ou retire le rappel dans les réglages de Claude Code.
+
+        En cas d'échec, l'interrupteur revient à l'état du fichier plutôt que
+        de laisser croire à un changement qui n'a pas eu lieu.
+        """
+        reussi = rappel.installer() if installe else rappel.retirer()
+        if not reussi:
+            self._panneau.definir_rappel(rappel.est_installe())
+
     def ouvrir(self) -> None:
         """Le panneau s'ouvre : sur la question qui attendait, ou au repos."""
         self._panneau.ancrer(self._barre.zone())
+        self._panneau.definir_rappel(rappel.est_installe())
 
         if self._etat is not Etat.FERME:
             # Déjà ouvert : on le ramène devant, en le replaçant au passage.

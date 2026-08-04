@@ -29,6 +29,7 @@ from qfluentwidgets import (
     PushButton,
     SegmentedWidget,
     SmoothScrollArea,
+    SwitchButton,
     StrongBodyLabel,
     TextEdit,
     TransparentToolButton,
@@ -101,6 +102,7 @@ class Panneau(QWidget):
     question_demandee = pyqtSignal()
     tableau_demande = pyqtSignal()
     fermeture_demandee = pyqtSignal()
+    rappel_change = pyqtSignal(bool)
     sortie_demandee = pyqtSignal()
     masque = pyqtSignal()
 
@@ -339,6 +341,15 @@ class Panneau(QWidget):
         ligne.setContentsMargins(0, 6, 0, 0)
         ligne.setSpacing(8)
 
+        self._interrupteur_rappel = SwitchButton(pied)
+        self._interrupteur_rappel.setOnText("Rappel dans Claude Code")
+        self._interrupteur_rappel.setOffText("Rappel désactivé")
+        self._interrupteur_rappel.setToolTip(
+            "Remplace les mots du compteur d'attente de Claude Code. "
+            "Redémarrez Claude Code pour voir le changement."
+        )
+        self._interrupteur_rappel.checkedChanged.connect(self.rappel_change.emit)
+        ligne.addWidget(self._interrupteur_rappel)
         ligne.addStretch(1)
 
         quitter = TransparentToolButton(FluentIcon.POWER_BUTTON, pied)
@@ -461,6 +472,17 @@ class Panneau(QWidget):
         self._definir_section_active(_SECTION_TABLEAU)
 
         self._afficher(LARGEUR, HAUTEUR_TABLEAU)
+
+    def definir_rappel(self, installe: bool) -> None:
+        """Aligne l'interrupteur sur l'état réel, sans relancer le signal.
+
+        Les réglages de Claude Code peuvent avoir changé pendant que le
+        panneau était fermé : c'est l'état du fichier qui fait foi, pas ce que
+        l'interrupteur affichait la dernière fois.
+        """
+        self._interrupteur_rappel.blockSignals(True)
+        self._interrupteur_rappel.setChecked(installe)
+        self._interrupteur_rappel.blockSignals(False)
 
     def _definir_section_active(self, section: str) -> None:
         """Aligne la navigation sur la section affichée, sans relancer le signal.

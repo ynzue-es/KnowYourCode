@@ -40,6 +40,7 @@ from connais_ton_code.etats import Etat  # noqa: E402
 from connais_ton_code.extraction import fonctions  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import EntreeHistorique  # noqa: E402
+from connais_ton_code import rappel  # noqa: E402
 from connais_ton_code.statistiques import calculer_statistiques  # noqa: E402
 
 _constats: list[tuple[bool, str]] = []
@@ -238,6 +239,56 @@ def verifier_statistiques() -> None:
     )
 
 
+def verifier_rappel() -> None:
+    """Contrôles sans interface sur le rappel posé dans Claude Code.
+
+    Ce module écrit dans le fichier de réglages personnels de l'utilisateur :
+    la moindre erreur lui ferait perdre sa configuration. Les contrôles
+    portent donc autant sur ce qui doit être conservé que sur ce qui change,
+    et travaillent sur une copie.
+    """
+    faux = Path(tempfile.mkdtemp(prefix="knowyourcode-reglages-")) / "settings.json"
+    faux.write_text(
+        json.dumps({"theme": "auto", "effortLevel": "high"}), encoding="utf-8"
+    )
+
+    _verifier(not rappel.est_installe(faux), "au départ, le rappel n'est pas posé")
+    _verifier(rappel.installer(faux), "poser le rappel réussit")
+    _verifier(rappel.est_installe(faux), "le rappel posé est reconnu")
+
+    apres = json.loads(faux.read_text(encoding="utf-8"))
+    _verifier(
+        apres.get("theme") == "auto" and apres.get("effortLevel") == "high",
+        "poser le rappel conserve les réglages personnels",
+    )
+    _verifier(
+        apres["spinnerVerbs"]["mode"] == "replace",
+        "le rappel remplace les verbes plutôt que de s'y ajouter",
+    )
+    _verifier(
+        len(apres["spinnerVerbs"]["verbs"]) == len(rappel.phrases()),
+        "toutes les phrases sont posées",
+    )
+
+    _verifier(rappel.retirer(faux), "retirer le rappel réussit")
+    apres = json.loads(faux.read_text(encoding="utf-8"))
+    _verifier("spinnerVerbs" not in apres, "le retrait efface le bloc")
+    _verifier(
+        apres.get("theme") == "auto",
+        "le retrait conserve lui aussi les réglages personnels",
+    )
+
+    absent = Path(tempfile.mkdtemp(prefix="knowyourcode-vide-")) / "inexistant.json"
+    _verifier(
+        not rappel.est_installe(absent),
+        "un fichier de réglages absent ne fait pas tomber la lecture",
+    )
+    _verifier(
+        not rappel.installer(absent),
+        "poser le rappel sur un fichier absent échoue sans lever",
+    )
+
+
 def verifier_lecture_historique() -> None:
     """Contrôles sans interface, sur la tolérance de l'historique aux lignes invalides.
 
@@ -290,6 +341,7 @@ def main() -> int:
     verifier_extraction()
     verifier_statistiques()
     verifier_lecture_historique()
+    verifier_rappel()
 
     application = QApplication(sys.argv)
     _mode_barre_de_menus()
