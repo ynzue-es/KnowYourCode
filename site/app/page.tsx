@@ -351,7 +351,7 @@ export default async function Accueil() {
         <Section
           id="installation"
           surtitre="Installation"
-          titre="Trois étapes, dont une facultative"
+          titre="Quatre étapes, dont une facultative"
         >
           <ol className="space-y-8">
             <Etape numero={1} titre="Glisser dans Applications">
@@ -361,7 +361,23 @@ export default async function Accueil() {
               </p>
             </Etape>
 
-            <Etape numero={2} titre="Fournir une clé d'API Mistral">
+            {/* À retirer le jour où l'application est notarisée. */}
+            <Etape numero={2} titre="Autoriser la première ouverture">
+              <p>
+                Cette version n&apos;est pas notarisée par Apple. Au premier
+                double-clic, macOS annoncera que l&apos;application est
+                endommagée : elle ne l&apos;est pas, il lui manque un tampon.
+              </p>
+              <p className="mt-3">
+                Fermez le message, puis ouvrez Réglages Système →{" "}
+                <span className="text-encre">Confidentialité et sécurité</span>{" "}
+                et descendez tout en bas : un bouton{" "}
+                <span className="text-encre">« Ouvrir quand même »</span> vous
+                attend. C&apos;est à faire une seule fois.
+              </p>
+            </Etape>
+
+            <Etape numero={3} titre="Fournir une clé d'API Mistral">
               <p>
                 L&apos;évaluation passe par l&apos;API Mistral. Deux façons de
                 donner la clé, au choix.
@@ -387,7 +403,7 @@ export default async function Accueil() {
               </p>
             </Etape>
 
-            <Etape numero={3} titre="Ouvrir l'application">
+            <Etape numero={4} titre="Ouvrir l'application">
               <p>
                 L&apos;icône se pose dans la barre de menus, en haut à droite.
                 Rien n&apos;apparaît dans le Dock. Un clic ouvre le panneau, et

@@ -14,10 +14,17 @@ permissions:
 
 jobs:
   dmg:
-    name: DMG signé et notarisé
+    name: DMG pour macOS
     # macos-14 est le premier runner Apple Silicon : le DMG produit est arm64,
     # comme les Mac sur lesquels il sera installé.
     runs-on: macos-14
+
+    env:
+      # Tant que les secrets n'existent pas, la publication a lieu quand même,
+      # avec un DMG signé ad hoc que macOS refusera d'ouvrir sans détour par
+      # les réglages. Le jour où le certificat et la clé sont posés, les mêmes
+      # étapes signent et notarisent sans qu'il y ait une ligne à changer.
+      SIGNATURE_DISPONIBLE: ${{ secrets.CERTIFICAT_P12_BASE64 != '' && secrets.ASC_CLE_P8_BASE64 != '' }}
 
     steps:
       - name: Récupère le dépôt
@@ -52,6 +59,7 @@ jobs:
         run: python verifier.py
 
       - name: Ouvre un trousseau temporaire et y importe le certificat
+        if: env.SIGNATURE_DISPONIBLE == 'true'
         env:
           CERTIFICAT_P12_BASE64: ${{ secrets.CERTIFICAT_P12_BASE64 }}
           MOT_DE_PASSE_P12: ${{ secrets.MOT_DE_PASSE_P12 }}
@@ -84,6 +92,7 @@ jobs:
             $(security list-keychains -d user | tr -d '"')
 
       - name: Écrit la clé App Store Connect
+        if: env.SIGNATURE_DISPONIBLE == 'true'
         env:
           ASC_CLE_P8_BASE64: ${{ secrets.ASC_CLE_P8_BASE64 }}
         run: |
@@ -92,19 +101,60 @@ jobs:
           chmod 600 "$RUNNER_TEMP/asc.p8"
 
       - name: Fabrique le DMG, le signe et le notarise
+        if: env.SIGNATURE_DISPONIBLE == 'true'
         env:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_CLE_P8: ${{ runner.temp }}/asc.p8
         run: python outils/creer_dmg.py --notariser
 
+      - name: Fabrique le DMG, sans certificat
+        # `creer_dmg.py` retombe de lui-même sur une signature ad hoc quand il
+        # ne trouve aucune identité Developer ID.
+        if: env.SIGNATURE_DISPONIBLE != 'true'
+        run: python outils/creer_dmg.py
+
       - name: Détruit le trousseau temporaire
         # Même en cas d'échec plus haut : ni la clé privée du certificat ni la
         # clé d'API n'ont à survivre à l'exécution.
         if: always()
         run: |
-          security delete-keychain "$TROUSSEAU" || true
+          security delete-keychain "${TROUSSEAU:-}" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/asc.p8"
+
+      - name: Rédige les notes de version
+        # Un `heredoc` entre guillemets simples : le texte part tel quel, sans
+        # que le shell aille chercher une variable derrière une apostrophe.
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'FIN'
+          Utilitaire de barre de menus pour macOS, Apple Silicon.
+          FIN
+          if [ "$SIGNATURE_DISPONIBLE" != "true" ]; then
+            cat >> notes.md <<'FIN'
+
+          ### À la première ouverture
+
+          Cette version n'est pas notarisée par Apple : macOS annoncera que
+          l'application est endommagée. Elle ne l'est pas, il lui manque un
+          tampon.
+
+          1. Glissez KnowYourCode dans le dossier Applications.
+          2. Double-cliquez, puis fermez le message de refus.
+          3. Réglages Système → Confidentialité et sécurité, tout en bas :
+             « Ouvrir quand même ».
+
+          C'est à faire une seule fois.
+          FIN
+          fi
+          cat >> notes.md <<'FIN'
+
+          ### Ce qu'il faut savoir
+
+          L'évaluation passe par l'API Mistral : posez votre clé dans
+          `~/.knowyourcode/cle_mistral`. Sans clé, l'application démarre quand
+          même et rend une évaluation factice.
+          FIN
 
       - name: Crée la Release et y attache le DMG
         env:
@@ -113,4 +163,4 @@ jobs:
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" dist/*.dmg \
             --title "KnowYourCode $GITHUB_REF_NAME" \
-            --generate-notes
+            --notes-file notes.md
