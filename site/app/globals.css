@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+/* Les couleurs sont celles du panneau de l'application : un gris très sombre,
+   une bordure à peine plus claire, un blanc cassé pour le texte. Le logo est
+   dessiné dans les mêmes trois teintes. */
+@theme {
+  --color-fond: #0b0c0e;
+  --color-panneau: #151619;
+  --color-panneau-clair: #1f2023;
+  --color-bordure: #26282d;
+  --color-bordure-vive: #33363b;
+  --color-encre: #f5f6f8;
+  --color-attenue: #9298a2;
+  --color-discret: #767c86;
+  --color-accent: #8ab4f8;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background-color: var(--color-fond);
+  color: var(--color-encre);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
