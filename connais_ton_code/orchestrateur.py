@@ -1,6 +1,6 @@
 """Le chef d'orchestre : il tient l'état courant et branche les briques.
 
-Toute la logique du cycle est ici. La fenêtre signale des intentions, les
+Toute la logique du cycle est ici. Les fenêtres signalent des intentions, les
 briques rendent des données, et c'est l'orchestrateur qui décide de l'état
 suivant. Ce découpage est ce qui permettra de remplacer le détecteur, le
 sélecteur ou l'évaluateur sans rouvrir l'interface.
@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QObject, QThreadPool, QTimer
 
+from .barre_menu import BarreMenu
 from .detecteur import Detecteur
 from .etats import Etat, transition_valide
 from .evaluateur import Evaluateur
 from .fenetre import FenetreFlottante
 from .historique import Historique
+from .invitation import BulleInvitation
 from .modeles import Evaluation, Extrait
-from .pastille import PastilleTest
 from .reglages import Reglages
 from .selecteur import Selecteur
 from .taches import TacheEvaluation
@@ -25,27 +26,29 @@ INTERVALLE_SONDAGE_MS = 1000
 
 
 class Orchestrateur(QObject):
-    """Fait tourner le cycle Masquée → Question → Évaluation → Retour."""
+    """Fait tourner le cycle Masquée → Invitation → Question → Évaluation → Retour."""
 
     def __init__(
         self,
         fenetre: FenetreFlottante,
+        bulle: BulleInvitation,
         detecteur: Detecteur,
         selecteur: Selecteur,
         evaluateur: Evaluateur,
         historique: Historique,
         reglages: Reglages,
-        pastille: PastilleTest | None = None,
+        barre: BarreMenu | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._fenetre = fenetre
+        self._bulle = bulle
         self._detecteur = detecteur
         self._selecteur = selecteur
         self._evaluateur = evaluateur
         self._historique = historique
         self._reglages = reglages
-        self._pastille = pastille
+        self._barre = barre
 
         self._etat = Etat.MASQUEE
         self._extrait_courant: Extrait | None = None
@@ -66,7 +69,7 @@ class Orchestrateur(QObject):
     # ------------------------------------------------------------------
 
     def demarrer(self) -> None:
-        """Lance le sondage du détecteur. La fenêtre reste masquée."""
+        """Lance le sondage du détecteur. Rien ne s'affiche encore."""
         self._sonde.start()
 
     def etat(self) -> Etat:
@@ -81,11 +84,12 @@ class Orchestrateur(QObject):
             lambda x, y: self._reglages.enregistrer_position("fenetre", x, y)
         )
 
-        if self._pastille is not None:
-            self._pastille.question_demandee.connect(self._sur_demande_manuelle)
-            self._pastille.deplacee.connect(
-                lambda x, y: self._reglages.enregistrer_position("pastille", x, y)
-            )
+        self._bulle.ouverture_demandee.connect(self.poser_question)
+        self._bulle.rejet_demande.connect(self._sur_rejet_invitation)
+
+        if self._barre is not None:
+            self._barre.question_demandee.connect(self.poser_question)
+            self._barre.detection_simulee.connect(self._sur_detection_simulee)
 
     # ------------------------------------------------------------------
     # Transitions
@@ -98,28 +102,49 @@ class Orchestrateur(QObject):
 
     def _sonder(self) -> None:
         """Un tour d'horloge : le détecteur a-t-il quelque chose à signaler ?"""
-        # Poser une question par-dessus une question en cours reviendrait à
-        # effacer une réponse en train d'être écrite.
+        # Inviter par-dessus une question en cours reviendrait à effacer une
+        # réponse en train d'être écrite.
         if self._etat is not Etat.MASQUEE:
             return
         if self._detecteur.session_active():
-            self.poser_question()
+            self.inviter()
+
+    def inviter(self) -> None:
+        """Affiche la bulle d'invitation, sans encore choisir d'extrait.
+
+        Le tirage est repoussé au moment où l'utilisateur accepte : rien ne
+        garantit qu'il le fera, et une invitation ignorée ne doit pas brûler
+        un extrait.
+        """
+        if self._etat is not Etat.MASQUEE:
+            return
+        self._bulle.afficher()
+        self._aller_vers(Etat.INVITATION)
 
     def poser_question(self) -> None:
         """Choisit un extrait et l'affiche. Sans extrait, rien ne se passe."""
-        if self._etat is not Etat.MASQUEE:
+        if self._etat not in (Etat.MASQUEE, Etat.INVITATION, Etat.RETOUR):
             return
 
         extrait = self._selecteur.choisir(self._historique.identifiants_deja_vus())
         if extrait is None:
+            self._sur_rejet_invitation()
             return
 
+        self._bulle.masquer()
         self._extrait_courant = extrait
         self._fenetre.afficher_question(extrait)
         self._aller_vers(Etat.QUESTION)
 
-    def _sur_demande_manuelle(self) -> None:
-        """Le bouton de test passe par le détecteur, pas par un raccourci.
+    def _sur_rejet_invitation(self) -> None:
+        """L'invitation est écartée, ou s'est effacée toute seule."""
+        if self._etat is not Etat.INVITATION:
+            return
+        self._bulle.masquer()
+        self._aller_vers(Etat.MASQUEE)
+
+    def _sur_detection_simulee(self) -> None:
+        """Le menu passe par le détecteur, pas par un raccourci interne.
 
         Cela garde un seul chemin d'entrée dans le cycle, celui qui servira
         aussi à la détection automatique.
@@ -177,5 +202,6 @@ class Orchestrateur(QObject):
 
     def _terminer(self) -> None:
         self._extrait_courant = None
+        self._bulle.masquer()
         self._fenetre.masquer()
         self._aller_vers(Etat.MASQUEE)

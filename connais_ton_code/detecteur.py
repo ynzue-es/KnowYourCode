@@ -36,9 +36,9 @@ class Detecteur(Protocol):
 class DetecteurFactice:
     """Détecteur piloté à la main, en attendant la vraie surveillance.
 
-    La demande est posée par la pastille de test depuis le fil principal, puis
+    La demande est posée par le menu de la barre depuis le fil principal, puis
     consommée au tour d'horloge suivant : un clic donne exactement une
-    question.
+    invitation.
     """
 
     def __init__(self) -> None:

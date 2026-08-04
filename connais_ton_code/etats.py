@@ -11,10 +11,13 @@ from enum import Enum, auto
 
 
 class Etat(Enum):
-    """Les quatre états du cycle."""
+    """Les états du cycle."""
 
     MASQUEE = auto()
     """État par défaut : rien à l'écran, on attend une détection."""
+
+    INVITATION = auto()
+    """Une session vient de démarrer : une bulle propose de répondre."""
 
     QUESTION = auto()
     """Un extrait est affiché, la saisie est ouverte."""
@@ -29,7 +32,10 @@ class Etat(Enum):
 # Une transition non listée ici est un bug de l'orchestrateur, pas un cas à
 # gérer silencieusement : la table sert d'assertion.
 TRANSITIONS_AUTORISEES: dict[Etat, frozenset[Etat]] = {
-    Etat.MASQUEE: frozenset({Etat.QUESTION}),
+    # Depuis Masquée, la question directe court-circuite l'invitation :
+    # c'est le chemin de la barre de menus, où la demande est explicite.
+    Etat.MASQUEE: frozenset({Etat.INVITATION, Etat.QUESTION}),
+    Etat.INVITATION: frozenset({Etat.QUESTION, Etat.MASQUEE}),
     Etat.QUESTION: frozenset({Etat.EVALUATION, Etat.MASQUEE}),
     Etat.EVALUATION: frozenset({Etat.RETOUR, Etat.MASQUEE}),
     Etat.RETOUR: frozenset({Etat.MASQUEE, Etat.QUESTION}),

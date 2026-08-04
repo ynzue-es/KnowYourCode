@@ -36,6 +36,19 @@ def coin_bas_droite(fenetre: QWidget, decalage_vertical: int = 0) -> QPoint:
     return QPoint(x, y)
 
 
+def coin_haut_droite(fenetre: QWidget) -> QPoint:
+    """Position du coin haut droit, juste sous la barre de menus.
+
+    `availableGeometry` exclut déjà la barre de menus : inutile de deviner sa
+    hauteur, qui change avec l'encoche des écrans récents.
+    """
+    zone = _zone_utile()
+    return QPoint(
+        zone.right() - MARGE_ECRAN - fenetre.width() + MARGE_OMBRE,
+        zone.top() + MARGE_ECRAN - MARGE_OMBRE,
+    )
+
+
 def _reste_visible(fenetre: QWidget, position: QPoint) -> bool:
     cadre = QRect(position, fenetre.size())
     return any(

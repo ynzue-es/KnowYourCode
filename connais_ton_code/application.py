@@ -10,13 +10,14 @@ from PyQt6.QtWidgets import QApplication
 
 from .affichage import amorcer
 from .apparence import appliquer_theme_sombre
+from .barre_menu import BarreMenu
 from .detecteur import DetecteurFactice
 from .evaluateur import EvaluateurFactice
 from .fenetre import FenetreFlottante
 from .historique import Historique
+from .invitation import BulleInvitation
 from .orchestrateur import Orchestrateur
-from .pastille import PastilleTest
-from .placement import restaurer_ou_placer
+from .placement import coin_haut_droite, restaurer_ou_placer
 from .reglages import Reglages
 from .selecteur import SelecteurFactice
 
@@ -67,21 +68,26 @@ def construire(application: QApplication) -> Orchestrateur:
     restaurer_ou_placer(fenetre, reglages, "fenetre")
     amorcer(fenetre)
 
-    pastille = PastilleTest()
-    restaurer_ou_placer(
-        pastille, reglages, "pastille", decalage_vertical=fenetre.height()
-    )
-    pastille.fermeture_demandee.connect(application.quit)
-    amorcer(pastille, montrer_ensuite=True)
+    # La bulle est toujours placée par l'application : elle apparaît sous
+    # l'icône qui l'a déclenchée, et se déplacer n'aurait pas de sens pour
+    # quelque chose qui s'efface en quinze secondes.
+    bulle = BulleInvitation()
+    bulle.move(coin_haut_droite(bulle))
+    amorcer(bulle)
+
+    barre = BarreMenu(application)
+    barre.fermeture_demandee.connect(application.quit)
+    barre.show()
 
     orchestrateur = Orchestrateur(
         fenetre=fenetre,
+        bulle=bulle,
         detecteur=DetecteurFactice(),
         selecteur=SelecteurFactice(),
         evaluateur=EvaluateurFactice(),
         historique=historique,
         reglages=reglages,
-        pastille=pastille,
+        barre=barre,
         parent=application,
     )
     orchestrateur.demarrer()

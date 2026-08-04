@@ -2,10 +2,12 @@
 
 Clin d'œil au KYC bancaire : connaître son code plutôt que son client.
 
-Pendant que Claude Code travaille, une petite fenêtre flottante apparaît dans
-un coin de l'écran, affiche un bout de votre code récent et vous demande de
-l'expliquer. Le but n'est pas de noter, c'est de garder la maîtrise d'un code
-qu'on ne relit plus, et de s'entraîner au passage sur Python et TypeScript.
+Quand une session Claude Code démarre, une bulle discrète apparaît sous la
+barre de menus : « Répondez à quelques questions sur votre code ! ». Un clic
+ouvre une petite fenêtre qui affiche un bout de votre code récent et vous
+demande de l'expliquer. Le but n'est pas de noter, c'est de garder la maîtrise
+d'un code qu'on ne relit plus, et de s'entraîner au passage sur Python et
+TypeScript.
 
 La fenêtre ne vole jamais le focus clavier : elle s'affiche pendant que vous
 tapez dans votre terminal, et elle attend. Vous cliquez dedans si vous voulez
@@ -29,11 +31,13 @@ python -m connais_ton_code
 
 Ou, après un `pip install -e .`, simplement `knowyourcode`.
 
-L'application n'apparaît ni dans le Dock ni dans la barre de menus. Au
-démarrage, seule une petite pastille flottante s'affiche : c'est le
-déclencheur de test, en attendant la détection automatique. Son bouton pose
-une question ; l'icône à côté quitte l'application (Ctrl+C dans le terminal
-fait la même chose).
+L'application n'apparaît pas dans le Dock. Sa seule présence permanente est
+une icône dans la barre de menus, avec trois entrées :
+
+- **Poser une question** — ouvre directement une question.
+- **Simuler une détection** — affiche l'invitation, comme le fera le démarrage
+  d'une session une fois le détecteur écrit.
+- **Quitter KnowYourCode** — Ctrl+C dans le terminal fait la même chose.
 
 ## Vérification
 
@@ -50,13 +54,21 @@ sortie non nul en cas d'échec.
 
 ## Le cycle
 
-1. **Masquée** — l'état par défaut, rien à l'écran.
-2. **Question** — le chemin du fichier, le nom de la fonction, le code coloré,
+1. **Masquée** — l'état par défaut, rien à l'écran que l'icône de la barre.
+2. **Invitation** — une bulle en haut à droite propose de répondre. Elle
+   s'efface d'elle-même au bout de quinze secondes ; un clic ouvre la
+   question, la croix l'écarte. Tant qu'elle est ignorée, aucun extrait n'est
+   consommé.
+3. **Question** — le chemin du fichier, le nom de la fonction, le code coloré,
    une zone de saisie, les boutons Répondre (Cmd+Entrée) et Passer.
-3. **Évaluation** — un indicateur d'attente ; la fenêtre reste utilisable, on
+4. **Évaluation** — un indicateur d'attente ; la fenêtre reste utilisable, on
    peut la déplacer, relire le code, ou l'écarter d'un Esc.
-4. **Retour** — le verdict, ce qui a été oublié, et un bouton Suivant qui
+5. **Retour** — le verdict, ce qui a été oublié, et un bouton Suivant qui
    remet la fenêtre en sommeil.
+
+Les transitions autorisées sont déclarées dans `etats.py` et vérifiées à
+chaque passage : une transition hors table est traitée comme un bug, pas comme
+un cas à absorber en silence.
 
 ## État d'avancement
 
@@ -66,7 +78,7 @@ une implémentation factice derrière :
 
 | Brique | Contrat | Aujourd'hui | Plus tard |
 | --- | --- | --- | --- |
-| `detecteur.py` | dire quand poser une question | un bouton de test | surveiller les dates de modification des transcripts JSONL sous `~/.claude/projects/` |
+| `detecteur.py` | dire quand poser une question | l'entrée « Simuler une détection » du menu | surveiller les dates de modification des transcripts JSONL sous `~/.claude/projects/` |
 | `selecteur.py` | rendre un bout de code récent | trois extraits en dur, deux Python et un TSX | les fonctions tirées du diff des sept derniers jours |
 | `evaluateur.py` | juger la réponse | un retour en dur après une seconde | un appel à l'API Anthropic en Haiku |
 
@@ -97,6 +109,9 @@ se sert `verifier.py` pour ne pas polluer l'historique réel.
   arrondis, ombre douce, police d'interface du système. Le rendu Fluent
   d'origine, avec sa barre de titre et sa police Segoe UI, jure franchement à
   côté d'un terminal macOS.
+- **L'icône de la barre de menus** est dessinée dans le code plutôt que
+  chargée depuis un fichier, et déclarée comme masque : macOS la recolore
+  alors selon le thème de la barre, comme ses propres icônes.
 - **Version gratuite uniquement.** Aucun composant de la version Pro n'est
   utilisé.
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Vérification de bout en bout : le cycle d'états et le non-vol du focus.
 
-Le scénario reproduit la situation réelle : l'application est lancée pendant
-qu'on travaille ailleurs, une question apparaît, on répond, on lit le retour.
-Pendant tout ce temps le clavier doit rester à l'application qui l'avait.
+Le scénario reproduit la situation réelle : l'application tourne pendant qu'on
+travaille ailleurs, une session démarre, l'invitation apparaît, on répond, on
+lit le retour. Pendant tout ce temps le clavier doit rester à l'application
+qui l'avait.
 
 Le script se ferme tout seul et rend un code de sortie non nul si une des
 vérifications échoue.
@@ -103,7 +104,15 @@ def main() -> int:
 
     orchestrateur = construire(application)
     fenetre = orchestrateur._fenetre
-    pastille = orchestrateur._pastille
+    bulle = orchestrateur._bulle
+    barre = orchestrateur._barre
+
+    def _entrees_historique() -> list:
+        journal = os.path.join(DOSSIER_TEST, "historique.json")
+        if not os.path.exists(journal):
+            return []
+        with open(journal, encoding="utf-8") as fichier:
+            return json.load(fichier).get("entrees", [])
 
     def demarrage() -> None:
         _verifier(
@@ -111,15 +120,54 @@ def main() -> int:
             "au démarrage, l'état est Masquée",
         )
         _verifier(not est_a_l_ecran(fenetre), "la fenêtre n'est pas à l'écran")
-        _verifier(est_a_l_ecran(pastille), "la pastille de test est à l'écran")
+        _verifier(not bulle.est_visible(), "la bulle n'est pas à l'écran")
+        _verifier(barre.isVisible(), "l'icône de la barre de menus est en place")
         _verifier(
             _nous_sommes_au_premier_plan() is not True,
             "le lancement laisse le focus à l'application précédente",
         )
-        pastille.question_demandee.emit()
+        barre.detection_simulee.emit()
+
+    def invitation() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.INVITATION,
+            "une détection ouvre l'état Invitation",
+        )
+        _verifier(bulle.est_visible(), "la bulle d'invitation est à l'écran")
+        _verifier(
+            not est_a_l_ecran(fenetre),
+            "l'invitation n'ouvre pas encore la question",
+        )
+        _verifier(
+            _nous_sommes_au_premier_plan() is not True,
+            "l'invitation ne prend pas le focus",
+        )
+        bulle.rejet_demande.emit()
+
+    def apres_rejet() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.MASQUEE, "une invitation écartée referme tout"
+        )
+        _verifier(not bulle.est_visible(), "la bulle écartée quitte l'écran")
+        _verifier(
+            _entrees_historique() == [],
+            "une invitation écartée ne consomme aucun extrait",
+        )
+        barre.detection_simulee.emit()
+
+    def acceptation() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.INVITATION,
+            "une deuxième détection réarme l'invitation",
+        )
+        bulle.ouverture_demandee.emit()
 
     def question() -> None:
-        _verifier(orchestrateur.etat() is Etat.QUESTION, "le déclencheur ouvre l'état Question")
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION,
+            "accepter l'invitation ouvre la question",
+        )
+        _verifier(not bulle.est_visible(), "la bulle s'efface derrière la question")
         _verifier(est_a_l_ecran(fenetre), "la fenêtre de question est à l'écran")
         _verifier(
             _nous_sommes_au_premier_plan() is not True,
@@ -164,13 +212,6 @@ def main() -> int:
             "l'évaluation ne prend pas le focus",
         )
 
-    def _entrees_historique() -> list:
-        journal = os.path.join(DOSSIER_TEST, "historique.json")
-        if not os.path.exists(journal):
-            return []
-        with open(journal, encoding="utf-8") as fichier:
-            return json.load(fichier).get("entrees", [])
-
     def retour() -> None:
         _verifier(
             orchestrateur.etat() is Etat.RETOUR,
@@ -187,12 +228,12 @@ def main() -> int:
             orchestrateur.etat() is Etat.MASQUEE, "Suivant ramène à l'état Masquée"
         )
         _verifier(not est_a_l_ecran(fenetre), "la fenêtre est retirée de l'écran")
-        pastille.question_demandee.emit()
+        barre.question_demandee.emit()
 
     def echappement() -> None:
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "une deuxième question s'ouvre sur un autre extrait",
+            "le menu pose une question sans passer par l'invitation",
         )
         QTest.keyClick(fenetre._zone_reponse, Qt.Key.Key_Escape)
 
@@ -209,13 +250,13 @@ def main() -> int:
         )
         print("La dernière étape prend volontairement le focus une seconde,")
         print("pour vérifier qu'un clic permet bien de répondre au clavier.")
-        pastille.question_demandee.emit()
+        barre.question_demandee.emit()
 
     def clic_simule() -> None:
         """Reproduit le clic de l'utilisateur dans la fenêtre."""
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "une troisième question s'ouvre pour l'essai au clavier",
+            "une dernière question s'ouvre pour l'essai au clavier",
         )
         try:
             from AppKit import NSApplication
@@ -265,16 +306,19 @@ def main() -> int:
 
     for delai, etape in (
         (700, demarrage),
-        (1700, question),
-        (2000, evaluation),
-        (3300, retour),
-        (3700, suite),
-        (4900, echappement),
-        (5300, apres_echappement),
-        (6600, clic_simule),
-        (7100, raccourci),
-        (7400, fin),
-        (7900, restitution),
+        (1800, invitation),
+        (2100, apres_rejet),
+        (3200, acceptation),
+        (3500, question),
+        (3800, evaluation),
+        (5000, retour),
+        (5400, suite),
+        (5700, echappement),
+        (6100, apres_echappement),
+        (6400, clic_simule),
+        (6900, raccourci),
+        (7200, fin),
+        (7700, restitution),
     ):
         QTimer.singleShot(delai, etape)
 
