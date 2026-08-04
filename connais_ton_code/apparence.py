@@ -13,17 +13,13 @@ import sys
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QGraphicsDropShadowEffect, QWidget
+from PyQt6.QtWidgets import QWidget
 from qfluentwidgets import Theme, setFontFamilies, setTheme, setThemeColor
 
 COULEUR_FOND_PANNEAU = "#1f2023"
 COULEUR_BORDURE = "rgba(255, 255, 255, 0.10)"
 COULEUR_TEXTE_ATTENUE = "#8a8f98"
 COULEUR_ACCENT = "#4c8dff"
-
-# Le panneau est sans cadre : l'ombre est dessinée par nous, donc il faut
-# réserver de la marge autour pour qu'elle ait la place d'exister.
-MARGE_OMBRE = 14
 
 
 def appliquer_theme_sombre() -> None:
@@ -67,10 +63,3 @@ def style_panneau(rayon: int = 10) -> str:
     )
 
 
-def poser_ombre(cible: QWidget) -> None:
-    """Ajoute l'ombre portée sous le panneau."""
-    ombre = QGraphicsDropShadowEffect(cible)
-    ombre.setBlurRadius(24)
-    ombre.setOffset(0, 4)
-    ombre.setColor(QColor(0, 0, 0, 160))
-    cible.setGraphicsEffect(ombre)

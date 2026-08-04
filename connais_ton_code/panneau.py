@@ -36,9 +36,7 @@ from qfluentwidgets import (
 
 from .apparence import (
     COULEUR_TEXTE_ATTENUE,
-    MARGE_OMBRE,
     configurer_panneau,
-    poser_ombre,
     style_panneau,
 )
 from .coloration import COULEUR_FOND_CODE, colorer
@@ -61,6 +59,10 @@ HAUTEUR_ZONE_BASSE = 124
 HAUTEUR_ZONE_RETOUR = 186
 
 MARGE_ECRAN = 8
+
+# Le panneau se décolle de la barre de menus comme le font les menus du
+# système, sans plus.
+ECART_SOUS_LA_BARRE = 6
 
 _INDEX_REPOS = 0
 _INDEX_SAISIE = 1
@@ -117,14 +119,13 @@ class Panneau(QWidget):
 
     def _construire(self) -> None:
         exterieur = QVBoxLayout(self)
-        exterieur.setContentsMargins(
-            MARGE_OMBRE, MARGE_OMBRE, MARGE_OMBRE, MARGE_OMBRE
-        )
+        # Le cadre occupe toute la fenêtre : pas de marge autour, sinon elle
+        # se voit comme une bande sombre au lieu de disparaître.
+        exterieur.setContentsMargins(0, 0, 0, 0)
 
         self._cadre = QFrame(self)
         self._cadre.setObjectName("panneau")
         self._cadre.setStyleSheet(style_panneau())
-        poser_ombre(self._cadre)
         exterieur.addWidget(self._cadre)
 
         interieur = QVBoxLayout(self._cadre)
@@ -494,7 +495,7 @@ class Panneau(QWidget):
     # ------------------------------------------------------------------
 
     def _afficher(self, largeur: int, hauteur: int) -> None:
-        self.resize(largeur + 2 * MARGE_OMBRE, hauteur + 2 * MARGE_OMBRE)
+        self.resize(largeur, hauteur)
         self._positionner()
         _activer_application()
         self.show()
@@ -510,19 +511,18 @@ class Panneau(QWidget):
             # Position de repli : le coin où vit l'icône, faute de savoir où
             # elle est exactement.
             self.move(
-                zone.right() - self.width() - MARGE_ECRAN + MARGE_OMBRE,
-                zone.top() - MARGE_OMBRE + 2,
+                zone.right() - self.width() - MARGE_ECRAN,
+                zone.top() + ECART_SOUS_LA_BARRE,
             )
             return
 
         x = self._zone_ancrage.center().x() - self.width() // 2
         x = max(
-            zone.left() + MARGE_ECRAN - MARGE_OMBRE,
-            min(x, zone.right() - self.width() - MARGE_ECRAN + MARGE_OMBRE),
+            zone.left() + MARGE_ECRAN,
+            min(x, zone.right() - self.width() - MARGE_ECRAN),
         )
-        # `availableGeometry` commence déjà sous la barre de menus : la marge
-        # d'ombre suffit à décoller le panneau du bord.
-        self.move(x, zone.top() - MARGE_OMBRE + 2)
+        # `availableGeometry` commence déjà sous la barre de menus.
+        self.move(x, zone.top() + ECART_SOUS_LA_BARRE)
 
     # ------------------------------------------------------------------
     # Interactions
