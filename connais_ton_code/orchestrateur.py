@@ -52,6 +52,7 @@ class Orchestrateur(QObject):
 
         self._etat = Etat.MASQUEE
         self._extrait_courant: Extrait | None = None
+        self._actif = True
 
         # Une évaluation lancée puis abandonnée (Esc) finit quand même par
         # rendre son résultat : le jeton permet de reconnaître un retour
@@ -70,10 +71,36 @@ class Orchestrateur(QObject):
 
     def demarrer(self) -> None:
         """Lance le sondage du détecteur. Rien ne s'affiche encore."""
-        self._sonde.start()
+        if self._actif:
+            self._sonde.start()
 
     def etat(self) -> Etat:
         return self._etat
+
+    def est_actif(self) -> bool:
+        return self._actif
+
+    def definir_actif(self, actif: bool) -> None:
+        """Met la détection à l'écoute ou en pause.
+
+        La pause n'arrête que la détection automatique : demander une question
+        depuis le menu reste possible, puisque c'est un geste explicite.
+        """
+        self._actif = actif
+        self._reglages.enregistrer_detection_active(actif)
+
+        if self._barre is not None:
+            self._barre.definir_actif(actif)
+
+        if actif:
+            self._sonde.start()
+            return
+
+        self._sonde.stop()
+        # Une invitation déjà à l'écran deviendrait un vestige : la mettre en
+        # pause veut dire « laisse-moi tranquille », y compris maintenant.
+        if self._etat is Etat.INVITATION:
+            self._sur_rejet_invitation()
 
     def _brancher(self) -> None:
         self._fenetre.reponse_soumise.connect(self._sur_reponse)
@@ -90,6 +117,7 @@ class Orchestrateur(QObject):
         if self._barre is not None:
             self._barre.question_demandee.connect(self.poser_question)
             self._barre.detection_simulee.connect(self._sur_detection_simulee)
+            self._barre.activation_changee.connect(self.definir_actif)
 
     # ------------------------------------------------------------------
     # Transitions

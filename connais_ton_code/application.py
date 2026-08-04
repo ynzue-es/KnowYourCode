@@ -122,6 +122,8 @@ def construire(application: QApplication, factice: bool = False) -> Orchestrateu
         barre=barre,
         parent=application,
     )
+    # La pause survit au redémarrage : on la rétablit avant de sonder.
+    orchestrateur.definir_actif(reglages.detection_active())
     orchestrateur.demarrer()
 
     # Les fenêtres sont gardées vivantes par l'orchestrateur, qui appartient

@@ -35,6 +35,19 @@ class Reglages:
             return x, y
         return None
 
+    def detection_active(self) -> bool:
+        """Vrai si la détection était à l'écoute au dernier arrêt.
+
+        Une pause décidée hier n'a pas à être redécidée aujourd'hui.
+        """
+        valeur = self._contenu.get("detection_active")
+        return valeur if isinstance(valeur, bool) else True
+
+    def enregistrer_detection_active(self, actif: bool) -> None:
+        self._contenu["version"] = VERSION_FORMAT
+        self._contenu["detection_active"] = bool(actif)
+        ecrire_json(self.chemin, self._contenu)
+
     def enregistrer_position(self, nom: str, x: int, y: int) -> None:
         self._contenu["version"] = VERSION_FORMAT
         positions = self._contenu.setdefault("positions", {})

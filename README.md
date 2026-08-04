@@ -47,11 +47,21 @@ python -m connais_ton_code
 Ou, après un `pip install -e .`, simplement `knowyourcode`.
 
 L'application n'apparaît pas dans le Dock. Sa seule présence permanente est
-une icône dans la barre de menus, avec trois entrées :
+une icône dans la barre de menus, en haut à droite de l'écran. Elle dit son
+état sans qu'on ait à ouvrir le menu :
 
+| Icône | Sens |
+| --- | --- |
+| pleine | à l'écoute, une session détectée déclenchera une invitation |
+| creuse | en pause, rien ne se déclenchera tout seul |
+
+Le menu contient quatre entrées :
+
+- **Détection active** — l'interrupteur. La pause survit au redémarrage, et
+  n'empêche pas de demander une question à la main.
 - **Poser une question** — ouvre directement une question, sans attendre.
 - **Simuler une détection** — affiche l'invitation, comme le fait le démarrage
-  d'une session.
+  d'une session. Grisée pendant la pause, puisqu'elle ne produirait rien.
 - **Quitter KnowYourCode** — Ctrl+C dans le terminal fait la même chose.
 
 ## Vérification
@@ -121,7 +131,7 @@ Tout reste sur la machine, en clair, dans `~/.knowyourcode/` :
 - `historique.json` — les questions posées, la réponse donnée, l'évaluation et
   la date. Sert à ne pas reposer deux fois la même question, et à mesurer la
   progression.
-- `reglages.json` — la position de la fenêtre.
+- `reglages.json` — la position de la fenêtre et l'état de la détection.
 - `cle_mistral` — la clé d'API, si vous choisissez cette méthode. Hors du
   dépôt, exprès.
 

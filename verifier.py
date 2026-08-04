@@ -190,6 +190,13 @@ def main() -> int:
         with open(journal, encoding="utf-8") as fichier:
             return json.load(fichier).get("entrees", [])
 
+    def _reglages_sur_disque() -> dict:
+        fichier = os.path.join(DOSSIER_TEST, "reglages.json")
+        if not os.path.exists(fichier):
+            return {}
+        with open(fichier, encoding="utf-8") as ouvert:
+            return json.load(ouvert)
+
     def demarrage() -> None:
         _verifier(
             orchestrateur.etat() is Etat.MASQUEE,
@@ -202,7 +209,39 @@ def main() -> int:
             _nous_sommes_au_premier_plan() is not True,
             "le lancement laisse le focus à l'application précédente",
         )
+        _verifier(orchestrateur.est_actif(), "la détection démarre à l'écoute")
+        barre.activation_changee.emit(False)
+
+    def en_pause() -> None:
+        _verifier(not orchestrateur.est_actif(), "le menu met la détection en pause")
+        _verifier(
+            "pause" in barre.toolTip().lower(),
+            "l'infobulle de l'icône annonce la pause",
+        )
+        _verifier(
+            not barre._action_detection.isEnabled(),
+            "simuler une détection est grisé pendant la pause",
+        )
+        _verifier(
+            _reglages_sur_disque().get("detection_active") is False,
+            "la pause est écrite sur le disque",
+        )
         barre.detection_simulee.emit()
+
+    def pause_sans_effet() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.MASQUEE,
+            "en pause, une détection ne déclenche rien",
+        )
+        _verifier(not bulle.est_visible(), "en pause, aucune bulle n'apparaît")
+        barre.activation_changee.emit(True)
+
+    def reprise() -> None:
+        _verifier(orchestrateur.est_actif(), "le menu remet la détection à l'écoute")
+        _verifier(
+            _reglages_sur_disque().get("detection_active") is True,
+            "la reprise est écrite sur le disque",
+        )
 
     def invitation() -> None:
         _verifier(
@@ -382,19 +421,22 @@ def main() -> int:
 
     for delai, etape in (
         (700, demarrage),
-        (1800, invitation),
-        (2100, apres_rejet),
-        (3200, acceptation),
-        (3500, question),
-        (3800, evaluation),
-        (5000, retour),
-        (5400, suite),
-        (5700, echappement),
-        (6100, apres_echappement),
-        (6400, clic_simule),
-        (6900, raccourci),
-        (7200, fin),
-        (7700, restitution),
+        (1000, en_pause),
+        (2300, pause_sans_effet),
+        (2600, reprise),
+        (3700, invitation),
+        (4000, apres_rejet),
+        (5100, acceptation),
+        (5400, question),
+        (5700, evaluation),
+        (6900, retour),
+        (7300, suite),
+        (7600, echappement),
+        (8000, apres_echappement),
+        (8300, clic_simule),
+        (8800, raccourci),
+        (9100, fin),
+        (9600, restitution),
     ):
         QTimer.singleShot(delai, etape)
 
