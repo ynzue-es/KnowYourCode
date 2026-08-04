@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knowyourcode"
+version = "0.1.0"
+description = "Une fenêtre flottante qui vous demande d'expliquer votre propre code pendant que Claude Code travaille."
+readme = "README.md"
+authors = [{ name = "Yannis Nzue Essono" }]
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["pyqt6", "fluent", "claude-code", "apprentissage", "revue-de-code"]
+classifiers = [
+    "Environment :: MacOS X :: Cocoa",
+    "Intended Audience :: Developers",
+    "Natural Language :: French",
+    "Programming Language :: Python :: 3",
+    "Topic :: Education",
+]
+dependencies = [
+    "PyQt6>=6.6",
+    "PyQt6-Fluent-Widgets>=1.5",
+    "Pygments>=2.15",
+    "pyobjc-framework-Cocoa>=9.0; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+knowyourcode = "connais_ton_code.application:lancer"
+
+[tool.setuptools]
+packages = ["connais_ton_code"]
