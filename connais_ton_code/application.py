@@ -5,7 +5,7 @@ from __future__ import annotations
 import signal
 import sys
 
-from PyQt6.QtCore import QThreadPool, QTimer
+from PyQt6.QtCore import Qt, QThreadPool, QTimer
 from PyQt6.QtWidgets import QApplication
 
 from .apparence import appliquer_theme_sombre
@@ -125,13 +125,44 @@ def attendre_les_evaluations(delai_ms: int = 3000) -> None:
     QThreadPool.globalInstance().waitForDone(delai_ms)
 
 
+def _ouvrir_a_l_activation(
+    application: QApplication, orchestrateur: Orchestrateur
+) -> None:
+    """Fait que cliquer sur l'application ouvre le panneau.
+
+    Sans ça, lancer l'application une deuxième fois ne produit rien : macOS
+    voit un programme déjà en marche et se contente de l'activer, or il n'a
+    aucune fenêtre à montrer. On ouvre donc le panneau à chaque fois que
+    l'application devient active, ce qui couvre aussi le tout premier
+    lancement.
+
+    Un utilitaire de barre de menus n'apparaît ni au Dock ni dans le
+    sélecteur d'applications : il ne devient actif que si on clique sur son
+    icône, sur son panneau, ou sur l'application elle-même. Il n'y a donc pas
+    d'activation involontaire à craindre.
+    """
+
+    def sur_changement(etat: Qt.ApplicationState) -> None:
+        if etat == Qt.ApplicationState.ApplicationActive:
+            orchestrateur.ouvrir()
+
+    application.applicationStateChanged.connect(sur_changement)
+
+
 def lancer() -> int:
     application = QApplication(sys.argv)
     application.setApplicationName("KnowYourCode")
     _mode_barre_de_menus()
     _autoriser_ctrl_c(application)
 
-    construire(application)
+    orchestrateur = construire(application)
+    _ouvrir_a_l_activation(application, orchestrateur)
+
+    # Lancer l'application doit produire quelque chose de visible. Le délai
+    # laisse à l'icône le temps d'exister : le panneau s'accroche dessous, et
+    # sans elle il ne saurait pas où s'ouvrir.
+    QTimer.singleShot(500, orchestrateur.ouvrir)
+
     code = application.exec()
     attendre_les_evaluations()
     return code

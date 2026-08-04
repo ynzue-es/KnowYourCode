@@ -7,6 +7,8 @@ décisions appartiennent à l'orchestrateur.
 
 from __future__ import annotations
 
+import sys
+
 from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QHideEvent, QKeyEvent, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -57,6 +59,23 @@ _INDEX_REPOS = 0
 _INDEX_SAISIE = 1
 _INDEX_ATTENTE = 2
 _INDEX_RETOUR = 3
+
+
+def _activer_application() -> None:
+    """Passe l'application au premier plan avant de montrer le panneau.
+
+    macOS efface les panneaux utilitaires des applications inactives : sans
+    cette activation, le panneau s'ouvre et disparaît dans la même seconde.
+    C'est aussi le comportement attendu, puisqu'on n'ouvre le panneau qu'à la
+    suite d'un clic de l'utilisateur.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplication
+    except ImportError:
+        return
+    NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
 
 
 class Panneau(QWidget):
@@ -301,9 +320,20 @@ class Panneau(QWidget):
     # ------------------------------------------------------------------
 
     def ancrer(self, zone_icone: QRect) -> None:
-        """Retient la position de l'icône, sous laquelle s'ouvrir."""
-        if not zone_icone.isNull():
+        """Retient la position de l'icône, sous laquelle s'ouvrir.
+
+        Une icône qui vient d'être créée annonce une position aberrante,
+        du genre `QRect(0, 1440, 38, 0)`, le temps que le système la place
+        vraiment. Elle n'est pas nulle pour autant : c'est sa hauteur qu'il
+        faut regarder, sinon le panneau s'ouvre hors de l'écran.
+        """
+        if not zone_icone.isEmpty():
             self._zone_ancrage = zone_icone
+
+    def repositionner(self) -> None:
+        """Replace le panneau, l'ancrage ayant pu changer depuis l'ouverture."""
+        if self.isVisible():
+            self._positionner()
 
     def afficher_repos(self, message: str) -> None:
         """Ouvre le panneau sans question en cours."""
@@ -385,6 +415,7 @@ class Panneau(QWidget):
     def _afficher(self, largeur: int, hauteur: int) -> None:
         self.resize(largeur + 2 * MARGE_OMBRE, hauteur + 2 * MARGE_OMBRE)
         self._positionner()
+        _activer_application()
         self.show()
         self.raise_()
         self.activateWindow()
@@ -394,8 +425,13 @@ class Panneau(QWidget):
         ecran = QGuiApplication.primaryScreen()
         zone = ecran.availableGeometry() if ecran else QRect(0, 0, 1280, 800)
 
-        if self._zone_ancrage.isNull():
-            self.move(zone.right() - self.width(), zone.top())
+        if self._zone_ancrage.isEmpty():
+            # Position de repli : le coin où vit l'icône, faute de savoir où
+            # elle est exactement.
+            self.move(
+                zone.right() - self.width() - MARGE_ECRAN + MARGE_OMBRE,
+                zone.top() - MARGE_OMBRE + 2,
+            )
             return
 
         x = self._zone_ancrage.center().x() - self.width() // 2

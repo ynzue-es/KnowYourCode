@@ -166,7 +166,9 @@ class Orchestrateur(QObject):
         self._panneau.ancrer(self._barre.zone())
 
         if self._etat is not Etat.FERME:
-            # Déjà ouvert : on le ramène simplement devant.
+            # Déjà ouvert : on le ramène devant, en le replaçant au passage.
+            # La position de l'icône a pu devenir connue depuis l'ouverture.
+            self._panneau.repositionner()
             self._panneau.raise_()
             self._panneau.activateWindow()
             return

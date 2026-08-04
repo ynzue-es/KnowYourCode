@@ -26,7 +26,10 @@ COTE_REFERENCE = 512
 
 FOND = "#1f2023"
 BORDURE = "#33363b"
-ACCENT = "#4c8dff"
+
+# Blanc sur noir : le contraste maximal, et la seule teinte qui reste elle-même
+# quel que soit le fond sur lequel l'icône atterrit.
+MARQUE = "#f5f6f8"
 
 RAYON_FOND = 112
 
@@ -141,7 +144,7 @@ def dessiner_logo(peintre: QPainter) -> None:
     cible = QRectF(
         (COTE_REFERENCE - utile) / 2, (COTE_REFERENCE - utile) / 2, utile, utile
     )
-    peintre.fillPath(ajuster(marque(True), cible), QColor(ACCENT))
+    peintre.fillPath(ajuster(marque(True), cible), QColor(MARQUE))
 
 
 def pixmap_logo(cote: int) -> QPixmap:
