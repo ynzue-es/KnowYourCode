@@ -14,9 +14,13 @@ DOSSIER_TRANSCRIPTS = Path.home() / ".claude" / "projects"
 # secondes suffisent à distinguer « en train de réfléchir » de « terminé ».
 SECONDES_ACTIVITE = 20.0
 
-# Deux invitations rapprochées agacent plus qu'elles n'entraînent : une
-# session bavarde produit une rafale par réponse.
-INTERVALLE_MINIMUM_S = 900.0
+# Deux sollicitations rapprochées agacent plus qu'elles n'entraînent : une
+# session bavarde produit une rafale par réponse. Cinq minutes laissent passer
+# les allers-retours d'une même tâche sans se taire toute la matinée. Le
+# réglage se change dans reglages.json, parce que la bonne valeur dépend de la
+# façon de travailler et qu'aucune estimation ne la trouvera à la place de
+# l'utilisateur.
+INTERVALLE_MINIMUM_S = 300.0
 
 
 @runtime_checkable

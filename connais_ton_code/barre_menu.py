@@ -107,10 +107,10 @@ class BarreMenu(QSystemTrayIcon):
     def _rafraichir(self) -> None:
         self.setIcon(icone_barre_menu(self._actif, self._en_attente))
         if self._en_attente:
-            self.setToolTip("KnowYourCode — une question vous attend")
+            self.setToolTip("KnowYourCode, une question vous attend")
             return
         self.setToolTip(
-            "KnowYourCode — à l'écoute" if self._actif else "KnowYourCode — en pause"
+            "KnowYourCode, à l'écoute" if self._actif else "KnowYourCode, en pause"
         )
 
     def notifier(self, titre: str, message: str) -> None:

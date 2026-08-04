@@ -76,7 +76,16 @@ qu'on ait à cliquer :
 | pastille à droite | une question vous attend |
 
 Un clic ouvre le panneau, sous l'icône. Tout s'y trouve : la question, la
-réponse, le verdict, l'interrupteur de détection et le bouton pour quitter.
+réponse, le verdict, la progression, l'interrupteur de détection et le
+bouton pour quitter.
+
+Le panneau a deux sections, choisies par un sélecteur en haut : Question,
+qui porte le cycle décrit ci-dessous, et Progression, qui montre le tableau
+de bord. Le passage de l'une à l'autre n'est permis que depuis Fermé, Repos
+ou Retour : rien n'y est en train de s'écrire, donc rien à perdre. Depuis
+Question ou Évaluation, le choix reste sans effet : une réponse en cours de
+saisie ou une évaluation en train de revenir sont un travail que la
+consultation des statistiques ne doit pas interrompre.
 
 ## Vérification
 
@@ -84,11 +93,13 @@ réponse, le verdict, l'interrupteur de détection et le bouton pour quitter.
 python verifier.py
 ```
 
-Le script contrôle d'abord le repérage des fonctions, puis déroule un cycle
-complet dans l'interface : détection, ouverture, réponse, évaluation, retour,
-fermeture, pause et reprise. Il ouvre le panneau à l'écran pendant quelques
-secondes, et rend un code de sortie non nul en cas d'échec. Il n'a besoin ni
-de réseau, ni de clé, ni d'une session Claude Code en cours.
+Le script contrôle d'abord le repérage des fonctions et le calcul des
+statistiques, sur des historiques construits à la main plutôt que rejoués
+depuis un fichier, puis déroule un cycle complet dans l'interface :
+détection, ouverture, réponse, évaluation, retour, consultation du tableau
+de bord, fermeture, pause et reprise. Il ouvre le panneau à l'écran pendant
+quelques secondes, et rend un code de sortie non nul en cas d'échec. Il n'a
+besoin ni de réseau, ni de clé, ni d'une session Claude Code en cours.
 
 ## Le cycle
 
@@ -99,6 +110,12 @@ de réseau, ni de clé, ni d'une session Claude Code en cours.
    une zone de saisie, les boutons Répondre (Cmd+Entrée) et Passer.
 4. **Évaluation** — un indicateur d'attente ; le panneau reste utilisable.
 5. **Retour** — le verdict, ce qui a été oublié, et un bouton Suivant.
+6. **Tableau** — la section Progression : le nombre de réponses, le score
+   moyen et le score récent, la courbe des vingt derniers scores, ce qui
+   revient le plus souvent dans les oublis, les fonctions les moins bien
+   expliquées et la répartition par langage. Tant qu'aucune réponse n'a
+   été donnée, la section dit juste qu'il n'y a encore rien à montrer,
+   plutôt que d'afficher des zéros qui ne diraient rien.
 
 Les transitions autorisées sont déclarées dans `etats.py` et vérifiées à
 chaque passage : une transition hors table est traitée comme un bug, pas comme
@@ -115,9 +132,13 @@ qu'une notification ignorée ne consomme pas de question.
 transcripts JSONL sous `~/.claude/projects/`. Claude Code y écrit en continu
 pendant qu'il travaille : un fichier touché dans les vingt dernières secondes
 signale une session active. L'alerte part sur le front montant, une seule fois
-par épisode, et pas plus d'une fois par quart d'heure. Le dossier du projet
-est lu dans le champ `cwd` du transcript, et non déduit du nom du dossier, qui
-n'est pas réversible.
+par épisode, et pas plus d'une fois toutes les cinq minutes. Le dossier du
+projet est lu dans le champ `cwd` du transcript, et non déduit du nom du
+dossier, qui n'est pas réversible.
+
+Cinq minutes est une estimation, pas une mesure : le bon rythme dépend de la
+façon de travailler. Il se change sans toucher au code, en ajoutant
+`"intervalle_minimum_secondes": 120` dans `~/.knowyourcode/reglages.json`.
 
 **La sélection** (`selecteur.py`, `extraction.py`) parcourt le projet détecté
 et tire une fonction au hasard parmi celles de 4 à 60 lignes. Les fonctions
@@ -144,7 +165,8 @@ Tout reste sur la machine, en clair, dans `~/.knowyourcode/` :
 - `historique.json` — les questions posées, la réponse donnée, l'évaluation et
   la date. Sert à ne pas reposer deux fois la même question, et à mesurer la
   progression.
-- `reglages.json` — l'état de la détection.
+- `reglages.json` — l'état de la détection, et son intervalle minimum si vous
+  le réglez.
 - `cle_mistral` — la clé d'API, si vous choisissez cette méthode. Hors du
   dépôt, exprès.
 

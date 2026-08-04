@@ -10,7 +10,12 @@ from PyQt6.QtWidgets import QApplication
 
 from .apparence import appliquer_theme_sombre
 from .barre_menu import BarreMenu
-from .detecteur import Detecteur, DetecteurClaudeCode, DetecteurFactice
+from .detecteur import (
+    INTERVALLE_MINIMUM_S,
+    Detecteur,
+    DetecteurClaudeCode,
+    DetecteurFactice,
+)
 from .evaluateur import Evaluateur, EvaluateurFactice, EvaluateurMistral, cle_mistral
 from .historique import Historique
 from .orchestrateur import Orchestrateur
@@ -51,10 +56,12 @@ def _autoriser_ctrl_c(application: QApplication) -> None:
     reveil.timeout.connect(lambda: None)
 
 
-def _choisir_detecteur(factice: bool) -> Detecteur:
+def _choisir_detecteur(factice: bool, reglages: Reglages) -> Detecteur:
     if factice:
         return DetecteurFactice()
-    reel = DetecteurClaudeCode()
+    reel = DetecteurClaudeCode(
+        intervalle_minimum=reglages.intervalle_minimum(INTERVALLE_MINIMUM_S)
+    )
     if reel.disponible():
         return reel
     print("~/.claude/projects/ introuvable : détection désactivée.")
@@ -99,7 +106,7 @@ def construire(application: QApplication, factice: bool = False) -> Orchestrateu
     orchestrateur = Orchestrateur(
         panneau=panneau,
         barre=barre,
-        detecteur=_choisir_detecteur(factice),
+        detecteur=_choisir_detecteur(factice, reglages),
         selecteur=_choisir_selecteur(factice),
         evaluateur=_choisir_evaluateur(factice),
         historique=historique,

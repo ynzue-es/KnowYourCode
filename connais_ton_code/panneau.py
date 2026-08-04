@@ -26,6 +26,7 @@ from qfluentwidgets import (
     PlainTextEdit,
     PrimaryPushButton,
     PushButton,
+    SegmentedWidget,
     SmoothScrollArea,
     StrongBodyLabel,
     SwitchButton,
@@ -42,14 +43,20 @@ from .apparence import (
 )
 from .coloration import COULEUR_FOND_CODE, colorer
 from .modeles import Evaluation, Extrait
+from .statistiques import Statistiques
+from .tableau_de_bord import TableauDeBord
 
-LARGEUR = 520
-HAUTEUR_QUESTION = 430
-HAUTEUR_REPOS = 150
+LARGEUR = 620
+HAUTEUR_QUESTION = 500
+HAUTEUR_REPOS = 170
+HAUTEUR_TABLEAU = 560
 
 # Hauteur figée du bas du panneau, sinon la zone de code se redimensionne au
-# moindre mot tapé et le regard perd sa place. L'état Retour est le seul à en
-# demander davantage : c'est là que le texte à lire se trouve.
+# moindre mot tapé et le regard perd sa place. Repos et Retour s'en écartent
+# dans un sens ou dans l'autre : Repos n'a qu'un message et un bouton à poser,
+# Retour est le seul à demander davantage, puisque c'est là que le texte à
+# lire se trouve.
+HAUTEUR_ZONE_REPOS = 70
 HAUTEUR_ZONE_BASSE = 124
 HAUTEUR_ZONE_RETOUR = 186
 
@@ -59,6 +66,10 @@ _INDEX_REPOS = 0
 _INDEX_SAISIE = 1
 _INDEX_ATTENTE = 2
 _INDEX_RETOUR = 3
+
+# Identifiants des deux sections de la navigation d'entête.
+_SECTION_QUESTION = "question"
+_SECTION_TABLEAU = "tableau"
 
 
 def _activer_application() -> None:
@@ -85,6 +96,7 @@ class Panneau(QWidget):
     passage_demande = pyqtSignal()
     suite_demandee = pyqtSignal()
     question_demandee = pyqtSignal()
+    tableau_demande = pyqtSignal()
     fermeture_demandee = pyqtSignal()
     activation_changee = pyqtSignal(bool)
     sortie_demandee = pyqtSignal()
@@ -116,7 +128,9 @@ class Panneau(QWidget):
         exterieur.addWidget(self._cadre)
 
         interieur = QVBoxLayout(self._cadre)
-        interieur.setContentsMargins(16, 10, 16, 10)
+        # Marges resserrées : la largeur gagnée doit profiter à la zone de
+        # code, pas à du vide sur les bords.
+        interieur.setContentsMargins(10, 10, 10, 10)
         interieur.setSpacing(8)
 
         interieur.addLayout(self._construire_entete())
@@ -124,12 +138,22 @@ class Panneau(QWidget):
         interieur.addWidget(self._localisation)
         interieur.addWidget(self._construire_zone_code(), stretch=1)
         interieur.addWidget(self._construire_zone_basse())
+        self._defilement_tableau = self._construire_tableau()
+        interieur.addWidget(self._defilement_tableau, stretch=1)
         interieur.addWidget(self._construire_pied())
+
+        self._definir_section_active(_SECTION_QUESTION)
 
     def _construire_entete(self) -> QHBoxLayout:
         ligne = QHBoxLayout()
         ligne.setSpacing(8)
         ligne.addWidget(StrongBodyLabel("KnowYourCode", self._cadre))
+
+        self._navigation = SegmentedWidget(self._cadre)
+        self._navigation.addItem(_SECTION_QUESTION, "Question")
+        self._navigation.addItem(_SECTION_TABLEAU, "Progression")
+        self._navigation.currentItemChanged.connect(self._sur_changement_section)
+        ligne.addWidget(self._navigation)
 
         self._etiquette_etat = CaptionLabel("", self._cadre)
         self._etiquette_etat.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
@@ -180,6 +204,21 @@ class Panneau(QWidget):
         self._pile.addWidget(self._construire_page_attente())
         self._pile.addWidget(self._construire_page_retour())
         return self._pile
+
+    def _construire_tableau(self) -> QWidget:
+        # `TableauDeBord` a sa propre taille figée : la mettre dans une zone
+        # de défilement évite qu'elle impose sa hauteur au panneau, exactement
+        # comme `_defilement_retour` le fait déjà pour le verdict.
+        self._tableau = TableauDeBord()
+        defilement = SmoothScrollArea(self._cadre)
+        defilement.setWidget(self._tableau)
+        defilement.setWidgetResizable(False)
+        defilement.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        defilement.setFrameShape(QFrame.Shape.NoFrame)
+        defilement.setStyleSheet("QScrollArea, QWidget { background: transparent; }")
+        defilement.viewport().setStyleSheet("background: transparent;")
+        defilement.setVisible(False)
+        return defilement
 
     def _construire_page_repos(self) -> QWidget:
         page = QWidget(self._pile)
@@ -341,8 +380,11 @@ class Panneau(QWidget):
         self._message_repos.setText(message)
         self._localisation.setVisible(False)
         self._zone_code.setVisible(False)
-        self._pile.setFixedHeight(HAUTEUR_ZONE_BASSE)
+        self._pile.setVisible(True)
+        self._pile.setFixedHeight(HAUTEUR_ZONE_REPOS)
         self._pile.setCurrentIndex(_INDEX_REPOS)
+        self._defilement_tableau.setVisible(False)
+        self._definir_section_active(_SECTION_QUESTION)
         self._afficher(LARGEUR, HAUTEUR_REPOS)
 
     def afficher_question(self, extrait: Extrait) -> None:
@@ -355,6 +397,9 @@ class Panneau(QWidget):
 
         self._localisation.setVisible(True)
         self._zone_code.setVisible(True)
+        self._pile.setVisible(True)
+        self._defilement_tableau.setVisible(False)
+        self._definir_section_active(_SECTION_QUESTION)
 
         self._zone_reponse.clear()
         self._zone_reponse.setReadOnly(False)
@@ -397,11 +442,47 @@ class Panneau(QWidget):
         self._pile.setFixedHeight(HAUTEUR_ZONE_RETOUR)
         self._pile.setCurrentIndex(_INDEX_RETOUR)
 
+    def afficher_tableau_de_bord(self, statistiques: Statistiques) -> None:
+        """Bascule sur la section Progression et l'ouvre à la bonne taille.
+
+        La zone de code, la localisation et le bas de panneau propres à une
+        question n'ont rien à faire ici : ils sont masqués, comme le fait déjà
+        `afficher_repos` pour ses propres besoins.
+        """
+        self._etiquette_etat.setText("progression")
+        self._tableau.afficher(statistiques)
+
+        self._localisation.setVisible(False)
+        self._zone_code.setVisible(False)
+        self._pile.setVisible(False)
+        self._defilement_tableau.setVisible(True)
+        self._definir_section_active(_SECTION_TABLEAU)
+
+        self._afficher(LARGEUR, HAUTEUR_TABLEAU)
+
     def definir_actif(self, actif: bool) -> None:
         """Met l'interrupteur à jour sans relancer le signal."""
         self._interrupteur.blockSignals(True)
         self._interrupteur.setChecked(actif)
         self._interrupteur.blockSignals(False)
+
+    def _definir_section_active(self, section: str) -> None:
+        """Aligne la navigation sur la section affichée, sans relancer le signal.
+
+        Même précaution que `definir_actif` : cette méthode est aussi
+        appelée depuis les méthodes `afficher_*`, quand c'est l'orchestrateur
+        qui change d'état, et ne doit pas redemander ce qu'il vient de décider.
+        """
+        self._navigation.blockSignals(True)
+        self._navigation.setCurrentItem(section)
+        self._navigation.blockSignals(False)
+
+    def _sur_changement_section(self, section: str) -> None:
+        """Traduit le clic sur la navigation en simple demande, sans rien trancher."""
+        if section == _SECTION_TABLEAU:
+            self.tableau_demande.emit()
+        else:
+            self.question_demandee.emit()
 
     def fermer(self) -> None:
         """Referme le panneau, sans rien conserver de la saisie."""

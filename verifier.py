@@ -3,7 +3,7 @@
 
 Le scénario suit le chemin réel : une session est détectée, une notification
 part, l'utilisateur ouvre le panneau quand ça l'arrange, répond, lit le
-retour, referme.
+retour, consulte le tableau de bord, referme.
 
 Le script se ferme tout seul et rend un code de sortie non nul si une des
 vérifications échoue. Il ouvre le panneau à l'écran et prend le focus pendant
@@ -19,6 +19,8 @@ import json
 import os
 import sys
 import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
 
 # Avant tout import du paquet : la vérification ne doit pas écrire dans
 # l'historique réel.
@@ -36,6 +38,9 @@ from connais_ton_code.application import (  # noqa: E402
 )
 from connais_ton_code.etats import Etat  # noqa: E402
 from connais_ton_code.extraction import fonctions  # noqa: E402
+from connais_ton_code.historique import Historique  # noqa: E402
+from connais_ton_code.modeles import EntreeHistorique  # noqa: E402
+from connais_ton_code.statistiques import calculer_statistiques  # noqa: E402
 
 _constats: list[tuple[bool, str]] = []
 
@@ -115,8 +120,176 @@ def soustraire(a, b):
     )
 
 
+def _entree(
+    identifiant: str,
+    chemin: str,
+    nom: str,
+    langage: str,
+    date: datetime,
+    issue: str,
+    score: int | None = None,
+    points_oublies: tuple[str, ...] = (),
+) -> EntreeHistorique:
+    """Construit une entrée d'historique à la main, pour les contrôles de calcul."""
+    return EntreeHistorique(
+        identifiant=identifiant,
+        chemin_fichier=chemin,
+        nom_fonction=nom,
+        langage=langage,
+        date=date,
+        issue=issue,
+        score=score,
+        verdict="verdict" if issue == "repondu" else None,
+        reponse="une réponse" if issue == "repondu" else None,
+        points_oublies=list(points_oublies),
+    )
+
+
+def verifier_statistiques() -> None:
+    """Contrôles sans interface, sur le calcul des statistiques de progression.
+
+    L'historique est construit à la main plutôt que rejoué depuis un fichier :
+    c'est le calcul qu'on vérifie ici, pas la lecture du disque. Deux langages,
+    des passages, et une même fonction posée deux fois, pour couvrir le
+    groupement et pas seulement la moyenne.
+    """
+    t1 = datetime(2024, 1, 1, 9, 0, tzinfo=timezone.utc)
+    t2 = datetime(2024, 1, 2, 9, 0, tzinfo=timezone.utc)
+    t3 = datetime(2024, 1, 3, 9, 0, tzinfo=timezone.utc)
+    t4 = datetime(2024, 1, 4, 9, 0, tzinfo=timezone.utc)
+    t5 = datetime(2024, 1, 5, 9, 0, tzinfo=timezone.utc)
+    t6 = datetime(2024, 1, 6, 9, 0, tzinfo=timezone.utc)
+
+    entrees = [
+        _entree("fct-a", "src/a.py", "additionner", "python", t1, "repondu", 40, ("l'edge case b=0",)),
+        _entree("fct-b", "src/b.ts", "trierListe", "typescript", t2, "repondu", 90),
+        _entree("fct-c", "src/c.py", "diviser", "python", t3, "passe"),
+        _entree("fct-a", "src/a.py", "additionner", "python", t4, "repondu", 60, ("la division par zéro",)),
+        _entree("fct-d", "src/d.ts", "formater", "typescript", t5, "repondu", 70, ("le fuseau horaire",)),
+        _entree("fct-e", "src/e.py", "filtrer", "python", t6, "passe"),
+    ]
+
+    statistiques = calculer_statistiques(entrees)
+
+    _verifier(
+        statistiques.nombre_de_questions == 6, "le nombre de questions compte toutes les entrées"
+    )
+    _verifier(
+        statistiques.nombre_de_reponses == 4, "le nombre de réponses écarte les passages"
+    )
+    _verifier(
+        statistiques.nombre_de_passages == 2, "le nombre de passages écarte les réponses"
+    )
+    _verifier(
+        statistiques.score_moyen == 65.0, "la moyenne générale ne porte que sur les réponses"
+    )
+    _verifier(
+        statistiques.score_moyen_recent == 65.0,
+        "en dessous du seuil des dix dernières, la moyenne récente vaut la moyenne générale",
+    )
+    _verifier(
+        statistiques.scores_recents == [40, 90, 60, 70],
+        "les scores récents suivent l'ordre chronologique, le plus ancien d'abord",
+    )
+    _verifier(
+        [f.identifiant for f in statistiques.fonctions_mal_expliquees]
+        == ["fct-a", "fct-d", "fct-b"],
+        "les fonctions mal expliquées sont triées du pire score moyen au meilleur",
+    )
+    _verifier(
+        statistiques.fonctions_mal_expliquees[0].nombre_de_fois == 2,
+        "une même fonction posée deux fois se regroupe au lieu de se dédoubler",
+    )
+    _verifier(
+        statistiques.fonctions_mal_expliquees[0].score_moyen == 50.0,
+        "le score moyen d'une fonction posée deux fois moyenne ses deux réponses",
+    )
+    _verifier(
+        [o.point for o in statistiques.oublis_recents]
+        == ["le fuseau horaire", "la division par zéro", "l'edge case b=0"],
+        "les oublis récents remontent du plus récent au plus ancien",
+    )
+    _verifier(
+        [
+            (l.langage, l.nombre_de_reponses, l.score_moyen)
+            for l in statistiques.repartition_par_langage
+        ]
+        == [("python", 2, 50.0), ("typescript", 2, 80.0)],
+        "la répartition par langage distingue Python et TypeScript",
+    )
+    _verifier(
+        statistiques.derniere_reponse == t5,
+        "la dernière réponse retient la date de la plus récente, pas de la dernière entrée",
+    )
+
+    vide = calculer_statistiques([])
+    _verifier(
+        vide.nombre_de_questions == 0
+        and vide.nombre_de_reponses == 0
+        and vide.nombre_de_passages == 0
+        and vide.score_moyen == 0.0
+        and vide.score_moyen_recent == 0.0
+        and vide.scores_recents == []
+        and vide.fonctions_mal_expliquees == []
+        and vide.oublis_recents == []
+        and vide.repartition_par_langage == []
+        and vide.derniere_reponse is None,
+        "un historique vide rend des statistiques neutres sans lever d'exception",
+    )
+
+
+def verifier_lecture_historique() -> None:
+    """Contrôles sans interface, sur la tolérance de l'historique aux lignes invalides.
+
+    Le fichier sur disque peut porter les traces d'une écriture interrompue ou
+    d'un format plus ancien : une ligne pareille doit être écartée, pas faire
+    tomber toute la lecture.
+    """
+    chemin = Path(DOSSIER_TEST) / "historique_corrompu.json"
+    brut = {
+        "version": 1,
+        "entrees": [
+            {
+                "identifiant": "ok-1",
+                "chemin_fichier": "a.py",
+                "nom_fonction": "f",
+                "langage": "python",
+                "issue": "repondu",
+                "date": "2024-01-01T10:00:00+00:00",
+                "score": 80,
+                "verdict": "bien",
+                "points_oublies": [],
+            },
+            {
+                "identifiant": "ok-2",
+                "chemin_fichier": "b.py",
+                "nom_fonction": "g",
+                "langage": "python",
+                "issue": "passe",
+                "date": "2024-01-02T10:00:00+00:00",
+            },
+            # Une écriture interrompue : les champs obligatoires manquent.
+            {"identifiant": "corrompu", "chemin_fichier": "c.py"},
+            # Un format plus ancien, avant le renommage des champs.
+            {"identifiant": "ancien-format", "fonction": "h", "date": "2024-01-03T10:00:00+00:00"},
+            # Une ligne qui n'est même pas un objet.
+            "une chaîne au lieu d'une entrée",
+        ],
+    }
+    with open(chemin, "w", encoding="utf-8") as fichier:
+        json.dump(brut, fichier)
+
+    lues = Historique(chemin=chemin).entrees()
+    _verifier(
+        {entree.identifiant for entree in lues} == {"ok-1", "ok-2"},
+        "une entrée corrompue ou d'un ancien format est ignorée sans faire tomber la lecture",
+    )
+
+
 def main() -> int:
     verifier_extraction()
+    verifier_statistiques()
+    verifier_lecture_historique()
 
     application = QApplication(sys.argv)
     _mode_barre_de_menus()
@@ -215,12 +388,39 @@ def main() -> int:
     def repos() -> None:
         _verifier(orchestrateur.etat() is Etat.REPOS, "Suivant ramène au repos")
         _verifier(panneau.isVisible(), "le panneau reste ouvert au repos")
+        # Une réponse vient d'être enregistrée : c'est le bon moment pour
+        # vérifier que le tableau de bord a quelque chose à montrer.
+        orchestrateur.afficher_tableau()
+
+    def tableau() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.TABLEAU,
+            "ouvrir le tableau de bord passe en état Tableau",
+        )
+        _verifier(panneau.isVisible(), "le panneau reste visible sur le tableau de bord")
+        panneau.question_demandee.emit()
+
+    def apres_tableau() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION,
+            "depuis le tableau de bord, on peut revenir à une question",
+        )
+        _verifier(panneau.isVisible(), "le panneau reste ouvert en revenant à la question")
+        panneau._bouton_passer.click()
+
+    def apres_passage() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.REPOS, "passer la question ramène de nouveau au repos"
+        )
+        _verifier(
+            len(_historique()) == 2, "le passage est lui aussi enregistré dans l'historique"
+        )
         panneau.fermeture_demandee.emit()
 
     def ferme() -> None:
         _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
         _verifier(not panneau.isVisible(), "le panneau a bien disparu")
-        _verifier(len(_historique()) == 1, "refermer n'enregistre rien de plus")
+        _verifier(len(_historique()) == 2, "refermer n'enregistre rien de plus")
         panneau.activation_changee.emit(False)
 
     def en_pause() -> None:
@@ -273,12 +473,15 @@ def main() -> int:
         (2300, evaluation),
         (3500, retour),
         (3800, repos),
-        (4100, ferme),
-        (4400, en_pause),
-        (5600, pause_sans_effet),
-        (5900, repos_en_pause),
-        (6200, question_manuelle),
-        (6500, fin),
+        (4000, tableau),
+        (4200, apres_tableau),
+        (4400, apres_passage),
+        (4700, ferme),
+        (5000, en_pause),
+        (6200, pause_sans_effet),
+        (6500, repos_en_pause),
+        (6800, question_manuelle),
+        (7100, fin),
     ):
         QTimer.singleShot(delai, etape)
 

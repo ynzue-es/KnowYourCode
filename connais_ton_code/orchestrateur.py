@@ -19,6 +19,7 @@ from .modeles import Evaluation, Extrait
 from .panneau import Panneau
 from .reglages import Reglages
 from .selecteur import Selecteur
+from .statistiques import calculer_statistiques
 from .taches import TacheEvaluation
 
 INTERVALLE_SONDAGE_MS = 1000
@@ -97,6 +98,7 @@ class Orchestrateur(QObject):
         self._panneau.passage_demande.connect(self._sur_passage)
         self._panneau.suite_demandee.connect(self._sur_suite)
         self._panneau.question_demandee.connect(self.poser_question)
+        self._panneau.tableau_demande.connect(self.afficher_tableau)
         self._panneau.fermeture_demandee.connect(self.fermer)
         self._panneau.activation_changee.connect(self.definir_actif)
         self._panneau.masque.connect(self._sur_masque)
@@ -187,7 +189,7 @@ class Orchestrateur(QObject):
 
     def poser_question(self) -> None:
         """Choisit un extrait et l'affiche."""
-        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR):
+        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR, Etat.TABLEAU):
             return
 
         self._panneau.ancrer(self._barre.zone())
@@ -205,6 +207,21 @@ class Orchestrateur(QObject):
         self._extrait_courant = extrait
         self._panneau.afficher_question(extrait)
         self._aller_vers(Etat.QUESTION)
+
+    def afficher_tableau(self) -> None:
+        """Calcule les statistiques et bascule le panneau sur le tableau de bord.
+
+        Recalculées à chaque ouverture plutôt que gardées en mémoire : la
+        dernière réponse enregistrée doit toujours apparaître, et relire tout
+        l'historique ne coûte rien face à la taille du fichier.
+        """
+        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR):
+            return
+
+        self._panneau.ancrer(self._barre.zone())
+        statistiques = calculer_statistiques(self._historique.entrees())
+        self._panneau.afficher_tableau_de_bord(statistiques)
+        self._aller_vers(Etat.TABLEAU)
 
     def _sur_reponse(self, reponse: str) -> None:
         if self._etat is not Etat.QUESTION or self._extrait_courant is None:

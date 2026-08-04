@@ -43,6 +43,17 @@ class Reglages:
         valeur = self._contenu.get("detection_active")
         return valeur if isinstance(valeur, bool) else True
 
+    def intervalle_minimum(self, defaut: float) -> float:
+        """Le temps minimal entre deux sollicitations, en secondes.
+
+        Réglable à la main dans le fichier : la bonne valeur dépend du rythme
+        de travail, et une estimation faite ici ne conviendra à personne.
+        """
+        valeur = self._contenu.get("intervalle_minimum_secondes")
+        if isinstance(valeur, (int, float)) and valeur >= 0:
+            return float(valeur)
+        return defaut
+
     def enregistrer_detection_active(self, actif: bool) -> None:
         self._contenu["version"] = VERSION_FORMAT
         self._contenu["detection_active"] = bool(actif)
