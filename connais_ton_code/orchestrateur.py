@@ -126,7 +126,9 @@ class Orchestrateur(QObject):
         if self._etat not in (Etat.MASQUEE, Etat.INVITATION, Etat.RETOUR):
             return
 
-        extrait = self._selecteur.choisir(self._historique.identifiants_deja_vus())
+        extrait = self._selecteur.choisir(
+            self._historique.identifiants_deja_vus(), self._detecteur.projet_actif()
+        )
         if extrait is None:
             self._sur_rejet_invitation()
             return

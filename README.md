@@ -1,13 +1,17 @@
+<img src="ressources/logo.png" alt="KnowYourCode" width="88">
+
 # KnowYourCode
 
 Clin d'œil au KYC bancaire : connaître son code plutôt que son client.
 
-Quand une session Claude Code démarre, une bulle discrète apparaît sous la
-barre de menus : « Répondez à quelques questions sur votre code ! ». Un clic
-ouvre une petite fenêtre qui affiche un bout de votre code récent et vous
-demande de l'expliquer. Le but n'est pas de noter, c'est de garder la maîtrise
-d'un code qu'on ne relit plus, et de s'entraîner au passage sur Python et
-TypeScript.
+Quand une session Claude Code se met à travailler, une bulle discrète apparaît
+sous la barre de menus : « Répondez à quelques questions sur votre code ! ».
+Un clic ouvre une petite fenêtre qui tire au hasard une fonction du dépôt en
+cours et vous demande de l'expliquer. Un modèle tiers compare votre
+explication au code et vous dit ce que vous avez oublié.
+
+Le but n'est pas de noter, c'est de garder la maîtrise d'un code qu'on ne
+relit plus, et de s'entraîner au passage sur Python et TypeScript.
 
 La fenêtre ne vole jamais le focus clavier : elle s'affiche pendant que vous
 tapez dans votre terminal, et elle attend. Vous cliquez dedans si vous voulez
@@ -23,6 +27,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+L'évaluation passe par l'API Mistral. Deux façons de fournir la clé, au choix :
+
+```bash
+export MISTRAL_API_KEY="votre-clé"
+# ou, pour ne pas dépendre de l'environnement du terminal :
+echo "votre-clé" > ~/.knowyourcode/cle_mistral && chmod 600 ~/.knowyourcode/cle_mistral
+```
+
+Sans clé, l'application démarre quand même et rend une évaluation factice :
+tout le reste fonctionne, il n'y a que le verdict qui est faux.
+
 ## Lancement
 
 ```bash
@@ -34,9 +49,9 @@ Ou, après un `pip install -e .`, simplement `knowyourcode`.
 L'application n'apparaît pas dans le Dock. Sa seule présence permanente est
 une icône dans la barre de menus, avec trois entrées :
 
-- **Poser une question** — ouvre directement une question.
-- **Simuler une détection** — affiche l'invitation, comme le fera le démarrage
-  d'une session une fois le détecteur écrit.
+- **Poser une question** — ouvre directement une question, sans attendre.
+- **Simuler une détection** — affiche l'invitation, comme le fait le démarrage
+  d'une session.
 - **Quitter KnowYourCode** — Ctrl+C dans le terminal fait la même chose.
 
 ## Vérification
@@ -45,12 +60,13 @@ une icône dans la barre de menus, avec trois entrées :
 python verifier.py
 ```
 
-Le script déroule tout seul un cycle complet et contrôle, à chaque étape, que
-l'application ne passe jamais au premier plan et que rien ne capte le clavier.
-Sa dernière étape prend délibérément le focus une seconde, pour vérifier
-l'autre moitié de la promesse : qu'un clic dans la fenêtre permet bien de
-taper sa réponse, et qu'Esc rend ensuite le clavier. Le script rend un code de
-sortie non nul en cas d'échec.
+Le script contrôle d'abord le repérage des fonctions, puis déroule un cycle
+complet dans l'interface en vérifiant à chaque étape que l'application ne
+passe jamais au premier plan et que rien ne capte le clavier. Sa dernière
+étape prend délibérément le focus une seconde, pour vérifier l'autre moitié de
+la promesse : qu'un clic dans la fenêtre permet bien de taper sa réponse, et
+qu'Esc rend ensuite le clavier. Il rend un code de sortie non nul en cas
+d'échec, et n'a besoin ni de réseau, ni de clé, ni d'une session en cours.
 
 ## Le cycle
 
@@ -70,29 +86,44 @@ Les transitions autorisées sont déclarées dans `etats.py` et vérifiées à
 chaque passage : une transition hors table est traitée comme un bug, pas comme
 un cas à absorber en silence.
 
-## État d'avancement
+## Comment ça marche
 
-Cette étape ne contient que l'interface et son cycle d'états. Les trois
-briques qui la nourrissent existent sous forme de contrats documentés, avec
-une implémentation factice derrière :
+**La détection** (`detecteur.py`) surveille les dates de modification des
+transcripts JSONL sous `~/.claude/projects/`. Claude Code y écrit en continu
+pendant qu'il travaille : un fichier touché dans les vingt dernières secondes
+signale une session active. L'invitation part sur le front montant, une seule
+fois par épisode, et pas plus d'une fois par quart d'heure. Le dossier du
+projet est lu dans le champ `cwd` du transcript, et non déduit du nom du
+dossier, qui n'est pas réversible.
 
-| Brique | Contrat | Aujourd'hui | Plus tard |
-| --- | --- | --- | --- |
-| `detecteur.py` | dire quand poser une question | l'entrée « Simuler une détection » du menu | surveiller les dates de modification des transcripts JSONL sous `~/.claude/projects/` |
-| `selecteur.py` | rendre un bout de code récent | trois extraits en dur, deux Python et un TSX | les fonctions tirées du diff des sept derniers jours |
-| `evaluateur.py` | juger la réponse | un retour en dur après une seconde | un appel à l'API Anthropic en Haiku |
+**La sélection** (`selecteur.py`, `extraction.py`) parcourt le projet détecté
+et tire une fonction au hasard parmi celles de 4 à 60 lignes. Les fonctions
+Python sont repérées avec `ast`, les fonctions TypeScript et TSX par un
+comptage d'accolades qui saute les chaînes et les commentaires. Au hasard, et
+non « la plus récente » : le code qu'on ne comprend plus n'est pas toujours
+celui qu'on vient d'écrire.
 
-Chacune est un `Protocol` : remplacer la version factice par la vraie ne
-demande de toucher ni à l'interface ni à l'orchestrateur.
+**L'évaluation** (`evaluateur.py`) envoie le code et votre explication à
+`mistral-small-latest` et en attend un verdict, une note et une liste de ce
+que vous n'avez pas mentionné. Un modèle tiers plutôt que celui qui a écrit le
+code : on ne demande pas à quelqu'un de corriger la copie qu'il a dictée.
+L'appel a lieu hors du fil de l'interface, qui reste utilisable pendant ce
+temps.
+
+Chacune de ces trois briques est un `Protocol` doublé d'une version factice,
+utilisée par la vérification et comme repli quand la vraie n'est pas
+disponible.
 
 ## Données locales
 
 Tout reste sur la machine, en clair, dans `~/.knowyourcode/` :
 
 - `historique.json` — les questions posées, la réponse donnée, l'évaluation et
-  la date. Sert à ne pas reposer deux fois la même question, et plus tard à
-  mesurer la progression.
-- `reglages.json` — la position des fenêtres.
+  la date. Sert à ne pas reposer deux fois la même question, et à mesurer la
+  progression.
+- `reglages.json` — la position de la fenêtre.
+- `cle_mistral` — la clé d'API, si vous choisissez cette méthode. Hors du
+  dépôt, exprès.
 
 La variable d'environnement `KNOWYOURCODE_DOSSIER` déplace ce dossier, ce dont
 se sert `verifier.py` pour ne pas polluer l'historique réel.
@@ -108,12 +139,14 @@ se sert `verifier.py` pour ne pas polluer l'historique réel.
   cadre est dessiné à la main : panneau sombre sans bordure de titre, coins
   arrondis, ombre douce, police d'interface du système. Le rendu Fluent
   d'origine, avec sa barre de titre et sa police Segoe UI, jure franchement à
-  côté d'un terminal macOS.
-- **L'icône de la barre de menus** est dessinée dans le code plutôt que
-  chargée depuis un fichier, et déclarée comme masque : macOS la recolore
-  alors selon le thème de la barre, comme ses propres icônes.
-- **Version gratuite uniquement.** Aucun composant de la version Pro n'est
-  utilisé.
+  côté d'un terminal macOS. Aucun composant de la version Pro n'est utilisé.
+- **Les certificats.** Les Python installés depuis python.org n'ont pas de
+  magasin de certificats tant qu'on n'a pas lancé leur script d'installation.
+  L'appel à Mistral passe donc par `certifi`.
+- **Le logo et l'icône** sont dessinés par `outils/creer_logo.py` et
+  `barre_menu.py` plutôt que chargés depuis des fichiers d'image. L'icône est
+  déclarée comme masque : macOS la recolore alors selon le thème de la barre,
+  comme ses propres icônes.
 
 ## Licence
 

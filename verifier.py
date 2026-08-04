@@ -37,6 +37,7 @@ from connais_ton_code.application import (  # noqa: E402
     construire,
 )
 from connais_ton_code.etats import Etat  # noqa: E402
+from connais_ton_code.extraction import fonctions  # noqa: E402
 
 _constats: list[tuple[bool, str]] = []
 
@@ -97,12 +98,87 @@ def _le_clic_pourra_donner_le_clavier(widget) -> bool:
     )
 
 
+# Le repérage des fonctions TypeScript compte les accolades à la main : c'est
+# la partie la plus facile à casser du projet, et la seule qui se vérifie sans
+# interface.
+_CAS_TYPESCRIPT = (
+    (
+        "un paramètre déstructuré ne coupe pas la fonction",
+        """function Theme({
+  enfants,
+  ...reste
+}: React.ComponentProps<typeof Fournisseur>) {
+  return <Fournisseur {...reste}>{enfants}</Fournisseur>
+}""",
+    ),
+    (
+        "une contrainte générique en objet ne coupe pas la fonction",
+        """export function trier<T extends { id: string }>(elements: T[]): T[] {
+  const copie = [...elements];
+  copie.sort((a, b) => a.id.localeCompare(b.id));
+  return copie;
+}""",
+    ),
+    (
+        "une fléchée à un seul paramètre sans parenthèses est repérée",
+        """const doubler = x => {
+  const resultat = x * 2;
+  return resultat;
+};""",
+    ),
+    (
+        "une fléchée rendant un objet va jusqu'à sa parenthèse",
+        """export const config = (delai = 5) => ({
+  delai,
+  actif: true,
+  libelle: "un } piege",
+});""",
+    ),
+    (
+        "une accolade dans une chaîne ne referme pas le bloc",
+        """function piege() {
+  const modele = "ceci { n'est pas } un bloc";
+  return modele;
+}""",
+    ),
+)
+
+
+def verifier_extraction() -> None:
+    """Contrôles sans interface, sur le repérage des fonctions."""
+    for description, code in _CAS_TYPESCRIPT:
+        trouvees = fonctions(code, "tsx")
+        attendu = code.count("\n") + 1
+        _verifier(
+            len(trouvees) == 1 and trouvees[0].nombre_de_lignes == attendu,
+            description,
+        )
+
+    python = '''def additionner(a, b):
+    """Somme."""
+    return a + b
+
+
+def soustraire(a, b):
+    return a - b
+'''
+    trouvees = fonctions(python, "python")
+    _verifier(
+        [f.nom for f in trouvees] == ["additionner", "soustraire"],
+        "les fonctions Python sont repérées dans l'ordre du fichier",
+    )
+
+
 def main() -> int:
+    verifier_extraction()
+
     application = QApplication(sys.argv)
     _passer_en_application_accessoire()
     _autoriser_ctrl_c(application)
 
-    orchestrateur = construire(application)
+    # Les briques réelles dépendent du disque, du réseau et d'une session
+    # Claude Code en cours : la vérification ne doit dépendre d'aucun des trois.
+    orchestrateur = construire(application, factice=True)
     fenetre = orchestrateur._fenetre
     bulle = orchestrateur._bulle
     barre = orchestrateur._barre

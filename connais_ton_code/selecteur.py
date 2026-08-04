@@ -1,35 +1,146 @@
-"""Choix de l'extrait de code à faire expliquer.
-
-BOUCHON : seule la version factice existe pour l'instant.
-"""
+"""Choix de l'extrait de code à faire expliquer."""
 
 from __future__ import annotations
 
+import random
+from pathlib import Path
 from typing import Iterable, Protocol, runtime_checkable
 
+from .extraction import LANGAGES, fonctions
 from .modeles import Extrait
+
+# Trop courte, il n'y a rien à expliquer ; trop longue, on ne relit pas.
+LIGNES_MIN = 4
+LIGNES_MAX = 60
+
+# Garde-fous du parcours : la sélection a lieu pendant que l'utilisateur
+# attend, elle doit rester de l'ordre de la fraction de seconde.
+FICHIERS_MAX = 600
+OCTETS_MAX = 300_000
+
+DOSSIERS_IGNORES = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        "out",
+        ".next",
+        ".turbo",
+        "coverage",
+        "site-packages",
+        "vendor",
+        "target",
+        ".idea",
+        ".vscode",
+    }
+)
 
 
 @runtime_checkable
 class Selecteur(Protocol):
-    """Contrat : rendre un bout de code que l'utilisateur a écrit récemment.
+    """Contrat : rendre un bout de code écrit dans le projet visé.
 
-    L'orchestrateur passe les identifiants déjà vus ; à charge du sélecteur de
-    les éviter tant qu'il a mieux à proposer. Rendre `None` est une réponse
-    valable et veut dire « rien à demander maintenant » : la fenêtre reste
-    alors masquée plutôt que d'afficher un extrait sans intérêt.
+    L'orchestrateur passe les identifiants déjà vus et le dossier du projet
+    sur lequel la session travaille. Rendre `None` est une réponse valable et
+    veut dire « rien à demander » : la fenêtre reste alors masquée plutôt que
+    d'afficher un extrait sans intérêt.
 
     L'appel a lieu sur le fil principal, juste avant l'affichage : il doit
     rester rapide.
-
-    Implémentation prévue : lire le diff des sept derniers jours, en extraire
-    les fonctions modifiées, et préférer les plus grosses et les moins
-    récemment interrogées.
     """
 
-    def choisir(self, deja_vus: Iterable[str]) -> Extrait | None:
+    def choisir(
+        self, deja_vus: Iterable[str], dossier: Path | None = None
+    ) -> Extrait | None:
         """Rend un extrait à faire expliquer, ou `None` si rien ne convient."""
         ...
+
+
+class SelecteurProjet:
+    """Tire une fonction au hasard dans le dossier du projet.
+
+    Au hasard, et non « la plus récemment modifiée » : le code qu'on ne
+    comprend plus n'est pas toujours celui qu'on vient d'écrire, et un tirage
+    uniforme finit par tout couvrir sans rien décider.
+    """
+
+    def choisir(
+        self, deja_vus: Iterable[str], dossier: Path | None = None
+    ) -> Extrait | None:
+        if dossier is None or not dossier.is_dir():
+            return None
+
+        candidats = self._recenser(dossier)
+        if not candidats:
+            return None
+
+        vus = set(deja_vus)
+        jamais_vus = [e for e in candidats if e.identifiant not in vus]
+        # Une fois tout le projet parcouru, mieux vaut réviser que se taire.
+        return random.choice(jamais_vus or candidats)
+
+    def _recenser(self, dossier: Path) -> list[Extrait]:
+        extraits: list[Extrait] = []
+        for fichier in self._fichiers(dossier):
+            langage = LANGAGES[fichier.suffix]
+            try:
+                if fichier.stat().st_size > OCTETS_MAX:
+                    continue
+                texte = fichier.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            try:
+                relatif = fichier.relative_to(dossier).as_posix()
+            except ValueError:
+                relatif = fichier.name
+
+            for fonction in fonctions(texte, langage):
+                if not LIGNES_MIN <= fonction.nombre_de_lignes <= LIGNES_MAX:
+                    continue
+                # Un constructeur ou une méthode spéciale se raconte tout
+                # seul : il n'y a rien à y comprendre qui ne soit dans le nom.
+                if fonction.nom.startswith("__") and fonction.nom.endswith("__"):
+                    continue
+                extraits.append(
+                    Extrait(
+                        identifiant=f"{relatif}:{fonction.nom}",
+                        chemin_fichier=relatif,
+                        nom_fonction=fonction.nom,
+                        langage=langage,
+                        code=fonction.code,
+                    )
+                )
+        return extraits
+
+    def _fichiers(self, dossier: Path) -> list[Path]:
+        trouves: list[Path] = []
+        a_parcourir = [dossier]
+        while a_parcourir and len(trouves) < FICHIERS_MAX:
+            courant = a_parcourir.pop()
+            try:
+                entrees = list(courant.iterdir())
+            except OSError:
+                continue
+            for entree in entrees:
+                if entree.name.startswith(".") and entree.name not in {".claude"}:
+                    continue
+                if entree.is_dir():
+                    if entree.name not in DOSSIERS_IGNORES:
+                        a_parcourir.append(entree)
+                elif entree.suffix in LANGAGES:
+                    trouves.append(entree)
+                    if len(trouves) >= FICHIERS_MAX:
+                        break
+        return trouves
 
 
 _EXTRAITS_FACTICES: tuple[Extrait, ...] = (
@@ -127,16 +238,17 @@ _EXTRAITS_FACTICES: tuple[Extrait, ...] = (
 class SelecteurFactice:
     """Sert en boucle une petite liste d'extraits écrits en dur.
 
-    Les extraits déjà vus sont écartés en priorité, mais une fois la liste
-    épuisée on recommence au lieu de rendre `None` : sans vraie source de code,
-    rendre `None` rendrait l'application intestable au deuxième lancement.
+    Sert aux vérifications, et de repli quand le projet visé ne contient
+    aucune fonction exploitable.
     """
 
     def __init__(self, extraits: tuple[Extrait, ...] = _EXTRAITS_FACTICES) -> None:
         self._extraits = extraits
         self._prochain = 0
 
-    def choisir(self, deja_vus: Iterable[str]) -> Extrait | None:
+    def choisir(
+        self, deja_vus: Iterable[str], dossier: Path | None = None
+    ) -> Extrait | None:
         if not self._extraits:
             return None
 

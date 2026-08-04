@@ -23,6 +23,7 @@ dependencies = [
     "PyQt6>=6.6",
     "PyQt6-Fluent-Widgets>=1.5",
     "Pygments>=2.15",
+    "certifi>=2023.7.22",
     "pyobjc-framework-Cocoa>=9.0; sys_platform == 'darwin'",
 ]
 

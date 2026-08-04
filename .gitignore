@@ -6,5 +6,10 @@ __pycache__/
 build/
 dist/
 .DS_Store
+
+# Une clé d'API n'a rien à faire ici, même par accident
+.env
+cle_mistral
+*.key
 .idea/
 .vscode/

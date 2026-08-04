@@ -5,5 +5,9 @@ PyQt6-Fluent-Widgets>=1.5
 # Coloration syntaxique des extraits
 Pygments>=2.15
 
+# Certificats pour l'appel à l'API Mistral : le Python de python.org sur macOS
+# n'en a pas tant qu'on n'a pas lancé son script d'installation à la main
+certifi>=2023.7.22
+
 # macOS : indispensable pour afficher la fenêtre sans voler le focus clavier
 pyobjc-framework-Cocoa>=9.0; sys_platform == "darwin"

@@ -11,15 +11,15 @@ from PyQt6.QtWidgets import QApplication
 from .affichage import amorcer
 from .apparence import appliquer_theme_sombre
 from .barre_menu import BarreMenu
-from .detecteur import DetecteurFactice
-from .evaluateur import EvaluateurFactice
+from .detecteur import Detecteur, DetecteurClaudeCode, DetecteurFactice
+from .evaluateur import Evaluateur, EvaluateurFactice, EvaluateurMistral, cle_mistral
 from .fenetre import FenetreFlottante
 from .historique import Historique
 from .invitation import BulleInvitation
 from .orchestrateur import Orchestrateur
 from .placement import coin_haut_droite, restaurer_ou_placer
 from .reglages import Reglages
-from .selecteur import SelecteurFactice
+from .selecteur import Selecteur, SelecteurFactice, SelecteurProjet
 
 
 def _passer_en_application_accessoire() -> None:
@@ -57,8 +57,40 @@ def _autoriser_ctrl_c(application: QApplication) -> None:
     reveil.timeout.connect(lambda: None)
 
 
-def construire(application: QApplication) -> Orchestrateur:
-    """Monte l'application et rend l'orchestrateur, déjà démarré."""
+def _choisir_detecteur(factice: bool) -> Detecteur:
+    if factice:
+        return DetecteurFactice()
+    reel = DetecteurClaudeCode()
+    if reel.disponible():
+        return reel
+    print("~/.claude/projects/ introuvable : détection désactivée.")
+    return DetecteurFactice()
+
+
+def _choisir_evaluateur(factice: bool) -> Evaluateur:
+    if factice:
+        return EvaluateurFactice()
+    cle = cle_mistral()
+    if cle:
+        return EvaluateurMistral(cle)
+    print(
+        "Aucune clé Mistral : évaluation factice. Renseigne MISTRAL_API_KEY "
+        "ou ~/.knowyourcode/cle_mistral."
+    )
+    return EvaluateurFactice()
+
+
+def _choisir_selecteur(factice: bool) -> Selecteur:
+    return SelecteurFactice() if factice else SelecteurProjet()
+
+
+def construire(application: QApplication, factice: bool = False) -> Orchestrateur:
+    """Monte l'application et rend l'orchestrateur, déjà démarré.
+
+    `factice` force les trois briques bouchonnées, ce dont a besoin la
+    vérification : elle ne doit dépendre ni du disque, ni du réseau, ni de la
+    présence d'une session Claude Code en cours.
+    """
     appliquer_theme_sombre()
 
     reglages = Reglages()
@@ -82,9 +114,9 @@ def construire(application: QApplication) -> Orchestrateur:
     orchestrateur = Orchestrateur(
         fenetre=fenetre,
         bulle=bulle,
-        detecteur=DetecteurFactice(),
-        selecteur=SelecteurFactice(),
-        evaluateur=EvaluateurFactice(),
+        detecteur=_choisir_detecteur(factice),
+        selecteur=_choisir_selecteur(factice),
+        evaluateur=_choisir_evaluateur(factice),
         historique=historique,
         reglages=reglages,
         barre=barre,
