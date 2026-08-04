@@ -18,3 +18,6 @@ cle_mistral
 *.key
 .idea/
 .vscode/
+
+# Espaces de travail temporaires de Claude Code
+.claude/worktrees/
