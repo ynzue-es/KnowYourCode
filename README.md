@@ -166,7 +166,13 @@ se sert `verifier.py` pour ne pas polluer l'historique réel.
 - **Le paquet.** `outils/creer_app.py` copie dans le paquet le véritable
   exécutable Python, et non le relais `bin/python3` qui ré-exécuterait
   `Python.app` et rendrait à macOS l'identité de Python. La copie est
-  re-signée localement, sans quoi le système l'abat au démarrage.
+  re-signée localement, sans quoi le système l'abat au démarrage. Cet
+  interpréteur est l'exécutable du paquet, sans script intermédiaire : un
+  lanceur qui `exec`ait un autre programme faisait perdre au système la trace
+  de l'application, et son icône de barre de menus n'était jamais placée.
+  Comme aucun argument n'est passé à l'exécutable, c'est `LSEnvironment` qui
+  pointe vers un `sitecustomize.py`, importé d'office par Python, et qui
+  démarre l'application.
 - **Les certificats.** Les Python installés depuis python.org n'ont pas de
   magasin de certificats tant qu'on n'a pas lancé leur script d'installation.
   L'appel à Mistral passe donc par `certifi`.
