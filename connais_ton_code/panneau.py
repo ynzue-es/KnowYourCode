@@ -14,6 +14,7 @@ from PyQt6.QtGui import QGuiApplication, QHideEvent, QKeyEvent, QKeySequence, QS
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
+    QLabel,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -40,6 +41,7 @@ from .apparence import (
     style_panneau,
 )
 from .coloration import COULEUR_FOND_CODE, colorer
+from .logo import pixmap_marque
 from .modeles import Evaluation, Extrait
 from .statistiques import Statistiques
 from .tableau_de_bord import TableauDeBord
@@ -148,6 +150,12 @@ class Panneau(QWidget):
     def _construire_entete(self) -> QHBoxLayout:
         ligne = QHBoxLayout()
         ligne.setSpacing(8)
+
+        logo = QLabel(self._cadre)
+        logo.setPixmap(pixmap_marque(15))
+        ligne.addWidget(logo)
+        ligne.addSpacing(-2)
+
         ligne.addWidget(StrongBodyLabel("KnowYourCode", self._cadre))
 
         self._navigation = SegmentedWidget(self._cadre)

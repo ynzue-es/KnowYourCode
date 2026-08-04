@@ -147,6 +147,29 @@ def dessiner_logo(peintre: QPainter) -> None:
     peintre.fillPath(ajuster(marque(True), cible), QColor(MARQUE))
 
 
+def pixmap_marque(hauteur: int, couleur: str = MARQUE) -> QPixmap:
+    """Rend la marque seule, sans son fond arrondi.
+
+    Dans le panneau, le fond du logo aurait la couleur du panneau : il ne se
+    verrait pas, sinon par son liseré. Seul le dessin est utile là.
+    """
+    tracé = marque(True)
+    boite = tracé.boundingRect()
+    largeur = max(1, round(hauteur * boite.width() / boite.height()))
+
+    image = QPixmap(largeur * 2, hauteur * 2)
+    image.setDevicePixelRatio(2.0)
+    image.fill(Qt.GlobalColor.transparent)
+
+    peintre = QPainter(image)
+    peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
+    peintre.fillPath(
+        ajuster(tracé, QRectF(0, 0, largeur, hauteur)), QColor(couleur)
+    )
+    peintre.end()
+    return image
+
+
 def pixmap_logo(cote: int) -> QPixmap:
     """Rend le logo à la taille demandée, fond transparent hors des coins."""
     image = QPixmap(cote, cote)
