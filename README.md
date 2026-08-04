@@ -128,17 +128,26 @@ qu'une notification ignorée ne consomme pas de question.
 
 ## Comment ça marche
 
-**La détection** (`detecteur.py`) surveille les dates de modification des
-transcripts JSONL sous `~/.claude/projects/`. Claude Code y écrit en continu
-pendant qu'il travaille : un fichier touché dans les vingt dernières secondes
-signale une session active. L'alerte part sur le front montant, une seule fois
-par épisode, et pas plus d'une fois toutes les cinq minutes. Le dossier du
-projet est lu dans le champ `cwd` du transcript, et non déduit du nom du
-dossier, qui n'est pas réversible.
+**La détection** (`detecteur.py`) guette le moment où vous envoyez un prompt,
+dans les transcripts JSONL sous `~/.claude/projects/`. Elle lit ce qui s'est
+ajouté au transcript depuis son dernier passage et y cherche un message de
+l'utilisateur.
 
-Cinq minutes est une estimation, pas une mesure : le bon rythme dépend de la
-façon de travailler. Il se change sans toucher au code, en ajoutant
-`"intervalle_minimum_secondes": 120` dans `~/.knowyourcode/reglages.json`.
+La date de modification du fichier ne suffisait pas : Claude Code y écrit
+pendant tout son tour, si bien qu'elle ne distingue pas le début du travail de
+son déroulement. Le contenu, lui, le dit exactement. Encore faut-il trier :
+les résultats d'outils sont enregistrés comme des messages de l'utilisateur
+alors que c'est Claude qui se répond à lui-même, et ils sont dix fois plus
+nombreux que les vrais prompts. Restent les lignes injectées par Claude Code,
+retours de commandes et comptes rendus de tâches, reconnaissables à la balise
+qui les ouvre.
+
+Aucun délai n'est imposé entre deux détections : une question déjà en attente
+empêche la suivante, ce qui suffit. Pour espacer davantage, ajoutez
+`"intervalle_minimum_secondes": 300` dans `~/.knowyourcode/reglages.json`.
+
+Le dossier du projet est lu dans le champ `cwd` du transcript, et non déduit
+du nom du dossier, qui n'est pas réversible.
 
 **La sélection** (`selecteur.py`, `extraction.py`) parcourt le projet détecté
 et tire une fonction au hasard parmi celles de 4 à 60 lignes. Les fonctions
