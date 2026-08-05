@@ -23,6 +23,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QFrame,
+    QSizePolicy,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -115,9 +116,38 @@ CARACTERES_COTE_A_COTE = 34
 # rétrécir. Quatre-vingts est le minimum que Qt applique lui-même aux boutons.
 LARGEUR_MINIMALE_OPTION = 80
 
-# Un bouton confortable au clic et à la lecture, et l'air entre deux.
+# Un bouton confortable au clic et à la lecture, et l'air entre deux. La
+# hauteur est figée, pas seulement minimale : laissé libre de grandir, le
+# bouton remplissait sa rangée et absorbait l'écart, qui tombait à deux pixels
+# alors que la grille en annonçait huit.
 HAUTEUR_BOUTON_OPTION = 34
-ECART_OPTIONS = 8
+ECART_OPTIONS = 10
+ECART_OPTIONS_HORIZONTAL = 14
+
+
+def _vider(mise_en_page) -> None:
+    """Retire tout ce qu'une mise en page contient, rangées comprises.
+
+    Les rangées sont des mises en page imbriquées : les retirer une à une ne
+    suffit pas, il faut descendre dedans, sinon les boutons d'hier survivent
+    sans parent visible et l'écart entre les propositions s'en trouve faussé.
+    """
+    while mise_en_page.count():
+        element = mise_en_page.takeAt(0)
+        objet = element.widget()
+        if objet is not None:
+            # `deleteLater` ne détruit qu'au prochain tour de boucle : d'ici
+            # là, un bouton retiré de sa mise en page garde sa position et
+            # continue de se peindre — et de recevoir les clics — par-dessus
+            # les propositions de la carte suivante. Le détacher tout de suite
+            # de son parent le fait disparaître à l'instant.
+            objet.setParent(None)
+            objet.deleteLater()
+            continue
+        interieure = element.layout()
+        if interieure is not None:
+            _vider(interieure)
+            interieure.deleteLater()
 
 
 def _colonnes_pour(options: tuple[str, ...]) -> int:
@@ -127,16 +157,6 @@ def _colonnes_pour(options: tuple[str, ...]) -> int:
     if max(len(texte) for texte in options) > CARACTERES_COTE_A_COTE:
         return 1
     return min(len(options), _COLONNES_QCM)
-
-
-def _rangees_pour(options: tuple[str, ...]) -> int:
-    colonnes = _colonnes_pour(options)
-    return max(1, -(-len(options) // colonnes))
-
-
-def _hauteur_des_options(options: tuple[str, ...]) -> int:
-    rangees = _rangees_pour(options)
-    return rangees * HAUTEUR_BOUTON_OPTION + (rangees - 1) * ECART_OPTIONS
 
 
 # La marge du cadre, dont il faut retirer deux fois la valeur pour connaître la
@@ -473,12 +493,22 @@ class Panneau(QWidget):
         return page
 
     def _construire_reponses(self, parent: QWidget) -> QWidget:
-        """La grille de propositions, seul geste de réponse qui subsiste."""
+        """Les propositions, empilées en rangées.
+
+        Des boîtes plutôt qu'une grille. `QGridLayout` répartit la place entre
+        ses rangées selon des indications de taille qu'on ne maîtrise pas
+        complètement : dix pixels d'écart demandés en donnaient cinq à
+        l'écran, puis moins deux — les boutons finissaient par se chevaucher.
+        Une pile de boîtes pose l'écart tel qu'on l'écrit, et c'est tout ce
+        qu'on lui demande.
+        """
         self._zone_options = QWidget(parent)
-        self._zone_options.setFixedHeight(68)
-        self._grille_options = QGridLayout(self._zone_options)
-        self._grille_options.setContentsMargins(0, 0, 0, 0)
-        self._grille_options.setSpacing(6)
+        self._zone_options.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+        )
+        self._colonne_options = QVBoxLayout(self._zone_options)
+        self._colonne_options.setContentsMargins(0, 0, 0, 0)
+        self._colonne_options.setSpacing(ECART_OPTIONS)
         return self._zone_options
 
     def _construire_page_correction(self) -> QWidget:
@@ -646,8 +676,12 @@ class Panneau(QWidget):
         self._etiquette_question.setMinimumHeight(
             self._etiquette_question.heightForWidth(largeur_utile)
         )
-        page = self._pile.widget(_INDEX_CARTE)
-        return page.layout().minimumSize().height()
+        # Les propositions viennent d'être posées : sans ce recalcul, la mise
+        # en page rend encore la mesure d'avant, et les boutons se retrouvent
+        # rognés par le bas.
+        mise_en_page = self._pile.widget(_INDEX_CARTE).layout()
+        mise_en_page.activate()
+        return mise_en_page.minimumSize().height()
 
     def afficher_correction(
         self, correction: Correction, numero: int, total: int
@@ -750,25 +784,33 @@ class Panneau(QWidget):
         self._poser_options(carte.options)
 
     def _poser_options(self, options: tuple[str, ...]) -> None:
-        """Refait la grille de propositions, celle d'avant n'ayant plus cours."""
-        for bouton in self._boutons_options:
-            self._grille_options.removeWidget(bouton)
-            bouton.deleteLater()
+        """Refait les propositions, celles d'avant n'ayant plus cours."""
+        _vider(self._colonne_options)
         self._boutons_options = []
 
         colonnes = _colonnes_pour(options)
-        self._zone_options.setFixedHeight(_hauteur_des_options(options))
+        for depart in range(0, len(options), colonnes):
+            rangee = QHBoxLayout()
+            rangee.setSpacing(ECART_OPTIONS_HORIZONTAL)
+            for texte in options[depart : depart + colonnes]:
+                bouton = BoutonReponse(texte, self._zone_options)
+                bouton.setFixedHeight(HAUTEUR_BOUTON_OPTION)
+                bouton.clicked.connect(
+                    lambda _=False, choix=texte: self._repondre(choix)
+                )
+                # Une mise en page Qt ne compte pas les widgets masqués, et un
+                # bouton qui vient d'être créé l'est encore : sans ce `show`,
+                # la zone se mesurait à vingt-et-un pixels pour deux rangées
+                # de trente-quatre, et les propositions débordaient.
+                bouton.show()
+                rangee.addWidget(bouton)
+                self._boutons_options.append(bouton)
+            self._colonne_options.addLayout(rangee)
 
-        for rang, texte in enumerate(options):
-            bouton = BoutonReponse(texte, self._zone_options)
-            bouton.setMinimumHeight(HAUTEUR_BOUTON_OPTION)
-            bouton.clicked.connect(
-                lambda _=False, choix=texte: self._repondre(choix)
-            )
-            self._grille_options.addWidget(
-                bouton, rang // colonnes, rang % colonnes
-            )
-            self._boutons_options.append(bouton)
+        # La zone prend la hauteur de ses rangées tout de suite : le bas de la
+        # carte se mesure juste après, et lirait sinon la taille d'avant.
+        self._colonne_options.activate()
+        self._zone_options.adjustSize()
 
     def _repondre(self, reponse: str) -> None:
         """Signale la réponse une fois, et referme le geste derrière elle."""
