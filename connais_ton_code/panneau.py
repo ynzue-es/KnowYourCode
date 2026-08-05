@@ -59,8 +59,14 @@ from .coloration import (
 from .logo import pixmap_marque
 from .modeles import Extrait
 
-LARGEUR = 620
-HAUTEUR_MANCHE = 520
+# Le panneau tenait en 620 × 520 du temps où l'on tapait une explication : le
+# code était un décor qu'on survolait. Maintenant qu'il faut le lire ligne à
+# ligne pour répondre — et cliquer dedans, sur les cartes « repérer » — il
+# devient le sujet, et la place lui revient. 760 laisse passer une ligne de
+# quatre-vingts caractères sans défilement horizontal, largeur au-delà de
+# laquelle plus personne n'écrit.
+LARGEUR = 760
+HAUTEUR_MANCHE = 640
 HAUTEUR_REPOS = 170
 HAUTEUR_BILAN = 210
 
@@ -78,6 +84,10 @@ HAUTEUR_ZONE_REPOS = 70
 HAUTEUR_ZONE_CARTE = 148
 HAUTEUR_ZONE_CORRECTION = 214
 HAUTEUR_ZONE_BILAN = 104
+
+# D'où la hauteur de la fenêtre en correction : ce que le bas gagne, la
+# fenêtre le prend, au lieu de le retirer au code.
+HAUTEUR_CORRECTION = HAUTEUR_MANCHE + HAUTEUR_ZONE_CORRECTION - HAUTEUR_ZONE_CARTE
 
 COULEUR_JUSTE = "#4ec9a0"
 COULEUR_FAUX = "#ff7b72"
@@ -190,8 +200,11 @@ def _code_numerote(code: str, langage: str) -> str:
         for numero, ligne in enumerate(lignes, start=1)
     )
     return (
-        f'<pre style="font-family:{POLICE_CODE}; font-size:12px;'
-        f" line-height:150%; color:{COULEUR_TEXTE_CODE};"
+        # Treize plutôt que douze : un point de plus ne change rien à ce qui
+        # tient à l'écran maintenant que le panneau est plus large, et beaucoup
+        # à la fatigue de qui relit une ligne pour la troisième fois.
+        f'<pre style="font-family:{POLICE_CODE}; font-size:13px;'
+        f" line-height:155%; color:{COULEUR_TEXTE_CODE};"
         f' white-space:pre; margin:0;">{corps}</pre>'
     )
 
@@ -702,6 +715,11 @@ class Panneau(QWidget):
 
         self._pile.setFixedHeight(HAUTEUR_ZONE_CORRECTION)
         self._pile.setCurrentIndex(_INDEX_CORRECTION)
+        # L'explication prend plus de place que la question : c'est la fenêtre
+        # qui s'allonge, pas le code qui se serre. Le panneau étant ancré sous
+        # la barre de menus, il grandit vers le bas et pas une ligne de code ne
+        # bouge — or c'est précisément l'instant où on la relit.
+        self.resize(LARGEUR, HAUTEUR_CORRECTION)
         self._bouton_suivant.setFocus()
 
     def afficher_bilan(self, justes: int, total: int, commentaire: str) -> None:
