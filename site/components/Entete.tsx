@@ -98,7 +98,7 @@ export function Entete({ lienTelechargement }: ProprietesEntete) {
           className="flex shrink-0 items-center gap-2.5 rounded-md"
         >
           <Logo taille={26} className="rounded-[7px]" />
-          <span className="text-encre text-[0.82rem] font-semibold tracking-tight">
+          <span className="text-encre text-[0.82rem] font-semibold">
             KnowYourCode
           </span>
         </a>

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 
 import { Ambiance } from "@/components/Ambiance";
 import {
@@ -13,9 +13,14 @@ import {
 
 import "./globals.css";
 
-/** Inter pour le texte, JetBrains Mono pour le code. Les deux sont exposées
- *  en variables CSS, que `globals.css` place en tête des piles de polices. */
-const inter = Inter({
+/** Plus Jakarta Sans pour le texte, JetBrains Mono pour le code. Les deux sont
+ *  exposées en variables CSS, que `globals.css` place en tête des piles de
+ *  polices.
+ *
+ *  Une géométrique plutôt qu'une grotesque : ses contreformes ouvertes et son
+ *  absence de contraste tiennent le fond très sombre du site, là où un dessin
+ *  plus classique s'y empâte. */
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--police-sans",
   display: "swap",
@@ -92,7 +97,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${inter.variable} ${jetbrains.variable} h-full antialiased`}
+      className={`${jakarta.variable} ${jetbrains.variable} h-full antialiased`}
     >
       <body className="relative flex min-h-full flex-col">
         <Ambiance />

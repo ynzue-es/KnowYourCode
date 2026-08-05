@@ -56,7 +56,7 @@ export default async function Accueil() {
                 Barre de menus · macOS · Open source
               </span>
 
-              <h1 className="text-encre mt-6 text-[1.8rem] leading-[1.15] font-semibold tracking-tight text-balance sm:text-[2.5rem] sm:leading-[1.1]">
+              <h1 className="text-encre mt-6 text-[1.8rem] leading-[1.15] font-semibold tracking-[-0.005em] text-balance sm:text-[2.5rem] sm:leading-[1.1]">
                 On délègue le code.
                 <span className="text-attenue block">
                   Pas la compréhension.
@@ -377,7 +377,7 @@ export default async function Accueil() {
               <div className="relative">
                 <h2
                   id="fin-titre"
-                  className="text-encre text-lg font-semibold tracking-tight text-balance sm:text-2xl"
+                  className="text-encre text-lg font-semibold text-balance sm:text-2xl"
                 >
                   Prenez une question quand vous avez deux minutes.
                 </h2>

@@ -49,7 +49,7 @@ export function Section({
             ) : null}
             <h2
               id={`${id}-titre`}
-              className="text-encre text-[1.35rem] font-semibold tracking-tight text-balance sm:text-3xl"
+              className="text-encre text-[1.35rem] font-semibold text-balance sm:text-3xl"
             >
               {titre}
             </h2>
