@@ -151,9 +151,12 @@ jobs:
 
           ### Ce qu'il faut savoir
 
-          L'évaluation passe par l'API Mistral : posez votre clé dans
-          `~/.knowyourcode/cle_mistral`. Sans clé, l'application démarre quand
-          même et rend une évaluation factice.
+          La fabrication des cartes passe par l'API Mistral : posez votre clé
+          dans `~/.knowyourcode/cle_mistral`. Sans clé, l'application démarre
+          quand même et pose des cartes factices, tirées du seul repérage.
+
+          Tout le reste est local : le choix de la fonction, la correction,
+          l'historique et la progression.
           FIN
 
       - name: Crée la Release et y attache le DMG
