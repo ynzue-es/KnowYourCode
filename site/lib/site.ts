@@ -15,8 +15,8 @@ export const TITRE = "KnowYourCode — on délègue le code, pas la compréhensi
 
 export const DESCRIPTION =
   "Un utilitaire de barre de menus pour macOS. Il tire au hasard une fonction " +
-  "du projet en cours et vous demande de l'expliquer. Un modèle tiers compare " +
-  "votre explication au code et vous dit ce que vous avez oublié.";
+  "du projet en cours et pose trois ou quatre questions rapides dessus : un " +
+  "clic, un mot. Puis il explique pourquoi ce code est écrit comme ça.";
 
 export const AUTEUR = "Yannis Nzue Essono";
 

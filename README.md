@@ -6,11 +6,17 @@ Clin d'œil au KYC bancaire : connaître son code plutôt que son client.
 
 Un utilitaire de barre de menus pour macOS. Quand vous avez un moment, vous
 ouvrez son panneau : il tire au hasard une fonction du projet sur lequel vous
-travaillez avec Claude Code, et vous demande de l'expliquer. Un modèle tiers
-compare votre explication au code et vous dit ce que vous avez oublié.
+travaillez avec Claude Code, et pose dessus une série de trois ou quatre
+cartes rapides. QCM, ligne à repérer d'un clic, valeur à prédire, vrai ou
+faux, notion à nommer — un geste chacune, rien à rédiger.
+
+Vous répondez court, l'application explique long : après chaque réponse,
+juste ou fausse, vient un texte qui dit pourquoi ce code est écrit comme ça,
+en nommant vos variables. La correction est locale et instantanée.
 
 Le but n'est pas de noter, c'est de garder la maîtrise d'un code qu'on ne
-relit plus, et de s'entraîner au passage sur Python et TypeScript.
+relit plus, et de s'entraîner au passage sur Python et TypeScript. Des
+questions simples, tous les jours, et une série de jours consécutifs.
 
 Rien ne s'ouvre tout seul, jamais. C'est vous qui décidez du moment.
 
@@ -24,7 +30,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-L'évaluation passe par l'API Mistral. Deux façons de fournir la clé, au choix :
+La fabrication des cartes passe par l'API Mistral. Deux façons de fournir la
+clé, au choix :
 
 ```bash
 export MISTRAL_API_KEY="votre-clé"
@@ -33,8 +40,8 @@ mkdir -p ~/.knowyourcode
 echo "votre-clé" > ~/.knowyourcode/cle_mistral && chmod 600 ~/.knowyourcode/cle_mistral
 ```
 
-Sans clé, l'application démarre quand même et rend une évaluation factice :
-tout le reste fonctionne, il n'y a que le verdict qui est faux.
+Sans clé, l'application démarre quand même et pose des cartes factices : tout
+le reste fonctionne, il n'y a que les questions qui sont creuses.
 
 ## Lancement
 
@@ -118,8 +125,8 @@ Code la couperait au milieu d'un mot.
 L'application n'apparaît pas dans le Dock, et rien ne s'ouvre au lancement :
 elle pose son icône dans la barre de menus et attend.
 
-**Le panneau**, sous l'icône, ne contient que l'exercice : le code, la zone de
-réponse, le verdict. On y répond en trente secondes et on retourne travailler.
+**Le panneau**, sous l'icône, ne contient que la série : le code, la question,
+l'explication. Une minute, et on retourne travailler.
 
 **La grande fenêtre**, au centre de l'écran, porte ce qu'on consulte en
 s'arrêtant : la progression et les réglages. Elle s'ouvre par l'icône en bas à
@@ -135,8 +142,8 @@ python verifier.py
 Le script contrôle d'abord le repérage des fonctions et le calcul des
 statistiques, sur des historiques construits à la main plutôt que rejoués
 depuis un fichier, puis déroule un cycle complet dans l'interface : ouverture,
-question, réponse, évaluation, retour, ouverture de la grande fenêtre,
-passage, fermeture. Il ouvre le panneau à l'écran pendant quelques secondes,
+série, réponses, explications, ouverture de la grande fenêtre, passage,
+fermeture. Il ouvre le panneau à l'écran pendant quelques secondes,
 et rend un code de sortie non nul en cas d'échec. Il n'a besoin ni de réseau,
 ni de clé, ni d'une session Claude Code en cours.
 
@@ -144,23 +151,27 @@ ni de clé, ni d'une session Claude Code en cours.
 
 1. **Fermé** — l'état par défaut, seule l'icône est visible.
 2. **Repos** — le panneau est ouvert, rien n'est demandé. Un bouton permet de
-   réclamer une question.
-3. **Question** — le chemin du fichier, le nom de la fonction, le code coloré,
-   une zone de saisie, les boutons Répondre (Cmd+Entrée) et Passer.
-4. **Évaluation** — un indicateur d'attente ; le panneau reste utilisable.
-5. **Retour** — le verdict, ce qui a été oublié, et un bouton Suivant.
+   réclamer une série.
+3. **Fabrication** — un indicateur d'attente, le temps que les cartes
+   reviennent ; le panneau reste utilisable. C'est la seule attente réseau du
+   cycle.
+4. **Carte** — le chemin du fichier, le nom de la fonction, le code coloré, la
+   question et ce qu'on peut y répondre : une option, une ligne, un mot. Et un
+   bouton Passer.
+5. **Explication** — la correction et le texte qui dit pourquoi, puis un bouton
+   Suivant jusqu'à la dernière carte de la série.
 
 La progression et les réglages ne figurent pas dans ce cycle : ils vivent dans
 la grande fenêtre, qui s'ouvre et se ferme sans rien changer à l'exercice en
 cours.
 
-La progression montre, dans cet ordre : quatre chiffres clés (score moyen avec
-sa tendance, jours d'affilée, réponses données, fonctions vues), un calendrier
-des douze dernières semaines, la courbe des vingt derniers scores, la
-répartition des notes par tranche, le détail par langage, ce qui revient le
-plus souvent dans les oublis, et les fonctions les moins bien expliquées. Tant
-qu'aucune réponse n'a été donnée, elle dit juste qu'il n'y a encore rien à
-montrer, plutôt que d'afficher des zéros qui ne diraient rien.
+La progression montre, dans cet ordre : quatre chiffres clés (réussite avec sa
+tendance, jours d'affilée, cartes répondues, fonctions vues), un calendrier des
+douze dernières semaines, la courbe des vingt dernières séries, la réussite par
+forme de question, le détail par langage, les notions qui résistent, et les
+fonctions les moins bien tenues. Tant qu'aucune carte n'a été répondue, elle
+dit juste qu'il n'y a encore rien à montrer, plutôt que d'afficher des zéros
+qui ne diraient rien.
 
 Le choix des formes suit le travail de chaque donnée : un chiffre qui résume
 se pose en grand plutôt qu'en graphique, une régularité se lit en calendrier
@@ -191,12 +202,15 @@ d'accolades qui saute les chaînes et les commentaires. Au hasard, et non « la
 plus récente » : le code qu'on ne comprend plus n'est pas toujours celui qu'on
 vient d'écrire.
 
-**L'évaluation** (`evaluateur.py`) envoie le code et votre explication à
-`mistral-small-latest` et en attend un verdict, une note et une liste de ce
-que vous n'avez pas mentionné. Un modèle tiers plutôt que celui qui a écrit le
-code : on ne demande pas à quelqu'un de corriger la copie qu'il a dictée.
-L'appel a lieu hors du fil de l'interface, qui reste utilisable pendant ce
-temps.
+**Les cartes** (`evaluateur.py`) envoient le code à `mistral-small-latest` et
+en attendent trois ou quatre questions, chacune avec ses réponses possibles, la
+bonne, et le texte qui explique pourquoi ce code est écrit comme ça. Un modèle
+tiers plutôt que celui qui a écrit le code : on ne fait pas passer
+l'interrogation à qui a dicté la copie. L'appel a lieu hors du fil de
+l'interface, qui reste utilisable pendant ce temps.
+
+Tout arrive d'un coup, avant la première question. La correction est donc
+locale et instantanée : pendant la série, plus rien n'attend le réseau.
 
 Chacune de ces briques est un `Protocol` doublé d'une version factice,
 utilisée par la vérification et comme repli quand la vraie n'est pas
@@ -206,9 +220,8 @@ disponible.
 
 Tout reste sur la machine, en clair, dans `~/.knowyourcode/` :
 
-- `historique.json` — les questions posées, la réponse donnée, l'évaluation et
-  la date. Sert à ne pas reposer deux fois la même question, et à mesurer la
-  progression.
+- `historique.json` — les cartes posées, les réponses données et la date. Sert
+  à ne pas reposer deux fois la même question, et à mesurer la progression.
 - `cle_mistral` — la clé d'API, si vous choisissez cette méthode. Hors du
   dépôt, exprès.
 

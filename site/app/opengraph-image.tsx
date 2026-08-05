@@ -70,7 +70,7 @@ export default function Image() {
           fontSize: 26,
         }}
       >
-        Utilitaire de barre de menus pour macOS
+        Trois questions par jour sur le code de votre projet
       </div>
     </div>,
     { ...size },
