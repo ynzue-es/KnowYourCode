@@ -93,15 +93,18 @@ export function Entete({ lienTelechargement }: ProprietesEntete) {
       />
 
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:gap-6 sm:px-6">
-        <a href="#haut" className="flex shrink-0 items-center gap-2.5 rounded-md">
+        <a
+          href="#haut"
+          className="flex shrink-0 items-center gap-2.5 rounded-md"
+        >
           <Logo taille={26} className="rounded-[7px]" />
-          <span className="text-encre text-sm font-semibold tracking-tight">
+          <span className="text-encre text-[0.82rem] font-semibold tracking-tight">
             KnowYourCode
           </span>
         </a>
 
         <nav aria-label="Sections de la page" className="hidden lg:block">
-          <ul className="flex items-center gap-1 text-sm">
+          <ul className="flex items-center gap-1 text-[0.82rem]">
             {NAVIGATION.map((lien) => {
               const active = courante === lien.id;
               return (
@@ -125,7 +128,7 @@ export function Entete({ lienTelechargement }: ProprietesEntete) {
 
         <a
           href={lienTelechargement}
-          className="bg-encre hover:bg-encre/90 shrink-0 rounded-full px-4 py-1.5 text-sm font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_24px_-4px] hover:shadow-white/30"
+          className="bg-encre hover:bg-encre/90 shrink-0 rounded-full px-3.5 py-1.5 text-[0.82rem] font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_24px_-4px] hover:shadow-white/30"
         >
           Télécharger
         </a>

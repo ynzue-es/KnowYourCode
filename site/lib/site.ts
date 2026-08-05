@@ -11,8 +11,7 @@ export const ADRESSE =
 
 export const NOM = "KnowYourCode";
 
-export const TITRE =
-  "KnowYourCode — on délègue le code, pas la compréhension";
+export const TITRE = "KnowYourCode — on délègue le code, pas la compréhension";
 
 export const DESCRIPTION =
   "Un utilitaire de barre de menus pour macOS. Il tire au hasard une fonction " +
@@ -20,3 +19,7 @@ export const DESCRIPTION =
   "votre explication au code et vous dit ce que vous avez oublié.";
 
 export const AUTEUR = "Yannis Nzue Essono";
+
+/** Le profil de l'auteur. Le dépôt vit dans `lib/release`, avec le reste
+ *  de ce qui touche aux versions publiées. */
+export const URL_AUTEUR = "https://github.com/ynzue-es";

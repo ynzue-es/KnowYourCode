@@ -16,6 +16,7 @@ import {
   URL_LICENCE,
   URL_PUBLICATIONS,
 } from "@/lib/release";
+import { URL_AUTEUR } from "@/lib/site";
 
 /** La page est reconstruite toutes les cinq minutes, le temps de voir passer
  *  une nouvelle version sans redéployer. Next exige ici une valeur littérale :
@@ -52,17 +53,17 @@ export default async function Accueil() {
                   aria-hidden="true"
                   className="bg-menthe anime-pulsation h-1.5 w-1.5 rounded-full"
                 />
-                Barre de menus · macOS
+                Barre de menus · macOS · Open source
               </span>
 
-              <h1 className="text-encre mt-6 text-[2rem] leading-[1.15] font-semibold tracking-tight text-balance sm:text-6xl sm:leading-tight">
+              <h1 className="text-encre mt-6 text-[1.8rem] leading-[1.15] font-semibold tracking-tight text-balance sm:text-[2.5rem] sm:leading-[1.1]">
                 On délègue le code.
                 <span className="text-attenue block">
                   Pas la compréhension.
                 </span>
               </h1>
 
-              <p className="text-attenue mt-6 max-w-xl text-base leading-relaxed sm:text-lg">
+              <p className="text-attenue mt-5 max-w-lg text-[0.92rem] leading-relaxed sm:text-base">
                 Un utilitaire de barre de menus pour macOS. Il tire au hasard
                 une fonction du projet en cours, vous demande de
                 l&apos;expliquer, et vous dit ce que vous avez oublié.
@@ -71,7 +72,7 @@ export default async function Accueil() {
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <a
                   href={LIEN_TELECHARGEMENT}
-                  className="bg-encre hover:bg-encre/90 inline-flex items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-base font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_36px_-8px] hover:shadow-white/40"
+                  className="bg-encre hover:bg-encre/90 inline-flex items-center justify-center gap-2.5 rounded-xl px-5 py-3 text-[0.92rem] font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_36px_-8px] hover:shadow-white/40"
                 >
                   <IconePomme />
                   Télécharger pour macOS
@@ -79,19 +80,36 @@ export default async function Accueil() {
 
                 <a
                   href={URL_DEPOT}
-                  className="border-bordure-vive bg-panneau/60 text-encre hover:border-discret hover:bg-panneau inline-flex items-center justify-center gap-2.5 rounded-xl border px-6 py-3.5 text-base font-medium backdrop-blur transition-colors"
+                  className="border-bordure-vive bg-panneau/60 text-encre hover:border-discret hover:bg-panneau inline-flex items-center justify-center gap-2.5 rounded-xl border px-5 py-3 text-[0.92rem] font-medium backdrop-blur transition-colors"
                 >
                   <IconeGitHub />
                   Voir sur GitHub
                 </a>
               </div>
 
-              <p className="text-discret mt-6 font-mono text-xs">
+              <p className="text-discret mt-6 font-mono text-[0.7rem]">
                 {precisions}
               </p>
 
+              <p className="text-discret mt-1.5 font-mono text-[0.7rem]">
+                Libre sous licence{" "}
+                <a
+                  href={URL_LICENCE}
+                  className="hover:text-attenue underline underline-offset-4 transition-colors"
+                >
+                  MIT
+                </a>
+                , écrit par{" "}
+                <a
+                  href={URL_AUTEUR}
+                  className="hover:text-attenue underline underline-offset-4 transition-colors"
+                >
+                  Yannis Nzue Essono
+                </a>
+              </p>
+
               {publieeLe ? (
-                <p className="text-discret mt-1.5 font-mono text-xs">
+                <p className="text-discret mt-1.5 font-mono text-[0.7rem]">
                   Publiée le {publieeLe} ·{" "}
                   <a
                     href={publication?.urlPublication ?? URL_PUBLICATIONS}
@@ -145,11 +163,11 @@ export default async function Accueil() {
               aria-hidden="true"
               className="bg-accent/40 absolute inset-y-8 left-0 w-px"
             />
-            <blockquote className="text-encre text-xl leading-snug font-medium text-balance sm:text-2xl">
+            <blockquote className="text-encre text-lg leading-snug font-medium text-balance sm:text-xl">
               « Rien ne s&apos;ouvre tout seul, jamais. C&apos;est vous qui
               décidez du moment. »
             </blockquote>
-            <figcaption className="text-attenue mt-4 max-w-2xl text-[0.95rem] leading-relaxed">
+            <figcaption className="text-attenue mt-3 max-w-2xl text-[0.88rem] leading-relaxed">
               Pas de notification, pas de fenêtre qui surgit au milieu
               d&apos;une phrase. L&apos;icône attend ; vous cliquez quand vous
               avez deux minutes.
@@ -205,7 +223,7 @@ export default async function Accueil() {
         >
           <LigneSpinner />
 
-          <div className="text-attenue mt-8 grid gap-8 text-[0.95rem] leading-relaxed lg:grid-cols-2">
+          <div className="text-attenue mt-8 grid gap-6 text-[0.88rem] leading-relaxed lg:grid-cols-2">
             <p>
               Un interrupteur dans les réglages écrit un bloc{" "}
               <Mono>spinnerVerbs</Mono> dans{" "}
@@ -323,7 +341,7 @@ export default async function Accueil() {
             </Etape>
           </ol>
 
-          <div className="border-bordure bg-panneau/60 text-attenue mt-12 rounded-2xl border p-6 text-[0.95rem] leading-relaxed backdrop-blur-sm sm:p-8">
+          <div className="border-bordure bg-panneau/60 text-attenue mt-12 rounded-2xl border p-6 text-[0.88rem] leading-relaxed backdrop-blur-sm sm:p-8">
             <p>
               <span className="text-encre font-medium">
                 Sans clé, l&apos;application démarre quand même
@@ -359,17 +377,17 @@ export default async function Accueil() {
               <div className="relative">
                 <h2
                   id="fin-titre"
-                  className="text-encre text-xl font-semibold tracking-tight text-balance sm:text-3xl"
+                  className="text-encre text-lg font-semibold tracking-tight text-balance sm:text-2xl"
                 >
                   Prenez une question quand vous avez deux minutes.
                 </h2>
-                <p className="text-attenue mt-2 font-mono text-xs sm:text-sm">
+                <p className="text-attenue mt-2 font-mono text-[0.7rem] sm:text-xs">
                   {precisions}
                 </p>
               </div>
               <a
                 href={LIEN_TELECHARGEMENT}
-                className="bg-encre hover:bg-encre/90 relative inline-flex shrink-0 items-center justify-center gap-2.5 rounded-xl px-6 py-3.5 text-base font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_36px_-8px] hover:shadow-white/40"
+                className="bg-encre hover:bg-encre/90 relative inline-flex shrink-0 items-center justify-center gap-2.5 rounded-xl px-5 py-3 text-[0.92rem] font-medium text-[#0b0c0e] transition-all duration-200 hover:shadow-[0_0_36px_-8px] hover:shadow-white/40"
               >
                 <IconePomme />
                 Télécharger pour macOS
@@ -457,8 +475,8 @@ function Etape({ numero, titre, children }: ProprietesEtape) {
         {numero}
       </span>
       <div className="min-w-0 flex-1">
-        <h3 className="text-encre text-base font-semibold">{titre}</h3>
-        <div className="text-attenue mt-2 max-w-3xl text-[0.95rem] leading-relaxed">
+        <h3 className="text-encre text-[0.95rem] font-semibold">{titre}</h3>
+        <div className="text-attenue mt-2 max-w-3xl text-[0.88rem] leading-relaxed">
           {children}
         </div>
       </div>

@@ -2,8 +2,14 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 
 import { Ambiance } from "@/components/Ambiance";
-import { URL_DEPOT } from "@/lib/release";
-import { ADRESSE, AUTEUR, DESCRIPTION, NOM, TITRE } from "@/lib/site";
+import {
+  ADRESSE,
+  AUTEUR,
+  DESCRIPTION,
+  NOM,
+  TITRE,
+  URL_AUTEUR,
+} from "@/lib/site";
 
 import "./globals.css";
 
@@ -29,7 +35,7 @@ export const metadata: Metadata = {
   },
   description: DESCRIPTION,
   applicationName: NOM,
-  authors: [{ name: AUTEUR, url: URL_DEPOT }],
+  authors: [{ name: AUTEUR, url: URL_AUTEUR }],
   creator: AUTEUR,
   publisher: AUTEUR,
   category: "technology",

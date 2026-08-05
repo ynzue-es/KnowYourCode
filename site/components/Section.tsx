@@ -42,19 +42,19 @@ export function Section({
         <Revelation className="max-w-2xl">
           <header>
             {surtitre ? (
-              <p className="text-accent/80 mb-4 flex items-center gap-3 font-mono text-xs tracking-[0.2em] uppercase">
+              <p className="text-accent/80 mb-3 flex items-center gap-3 font-mono text-[0.68rem] tracking-[0.2em] uppercase">
                 <span aria-hidden="true" className="bg-accent/40 h-px w-6" />
                 {surtitre}
               </p>
             ) : null}
             <h2
               id={`${id}-titre`}
-              className="text-encre text-2xl font-semibold tracking-tight text-balance sm:text-4xl"
+              className="text-encre text-[1.35rem] font-semibold tracking-tight text-balance sm:text-3xl"
             >
               {titre}
             </h2>
             {chapeau ? (
-              <div className="text-attenue mt-5 space-y-4 text-base leading-relaxed sm:text-lg">
+              <div className="text-attenue mt-4 space-y-3 text-[0.92rem] leading-relaxed sm:text-base">
                 {chapeau}
               </div>
             ) : null}

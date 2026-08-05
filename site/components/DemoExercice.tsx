@@ -195,15 +195,23 @@ export function DemoExercice() {
           Votre explication
         </p>
         <div className="border-bordure bg-fond/60 relative rounded-lg border px-3 py-2.5">
-          <p aria-hidden="true" className="invisible text-[0.82rem] leading-relaxed">
+          <p
+            aria-hidden="true"
+            className="invisible text-[0.82rem] leading-relaxed"
+          >
             {REPONSE}
           </p>
           <p className="text-attenue absolute inset-0 px-3 py-2.5 text-[0.82rem] leading-relaxed">
             {acteVu === "code" ? (
-              <span className="text-discret">Expliquez ce que fait cette fonction…</span>
+              <span className="text-discret">
+                Expliquez ce que fait cette fonction…
+              </span>
             ) : (
               <>
-                {REPONSE.slice(0, acteVu === "reponse" ? reponseVue : undefined)}
+                {REPONSE.slice(
+                  0,
+                  acteVu === "reponse" ? reponseVue : undefined,
+                )}
                 {acteVu === "reponse" ? (
                   <span className="bg-accent anime-curseur ml-px inline-block h-[1em] w-[2px] translate-y-[0.15em]" />
                 ) : null}
@@ -257,11 +265,16 @@ export function DemoExercice() {
                       className="text-attenue flex gap-2.5 text-[0.8rem] leading-relaxed"
                       style={
                         acteVu === "verdict"
-                          ? { animation: `montee 320ms cubic-bezier(0.16,1,0.3,1) ${180 + index * 110}ms both` }
+                          ? {
+                              animation: `montee 320ms cubic-bezier(0.16,1,0.3,1) ${180 + index * 110}ms both`,
+                            }
                           : undefined
                       }
                     >
-                      <span aria-hidden="true" className="text-ambre mt-px shrink-0">
+                      <span
+                        aria-hidden="true"
+                        className="text-ambre mt-px shrink-0"
+                      >
                         ·
                       </span>
                       {oubli}

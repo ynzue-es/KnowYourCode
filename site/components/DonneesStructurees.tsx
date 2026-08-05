@@ -1,6 +1,6 @@
 import type { Publication } from "@/lib/release";
 import { URL_DEPOT, URL_LICENCE } from "@/lib/release";
-import { ADRESSE, AUTEUR, DESCRIPTION, NOM } from "@/lib/site";
+import { ADRESSE, AUTEUR, DESCRIPTION, NOM, URL_AUTEUR } from "@/lib/site";
 
 type ProprietesDonnees = {
   publication: Publication | null;
@@ -27,11 +27,12 @@ export function DonneesStructurees({ publication }: ProprietesDonnees) {
     operatingSystem: "macOS 12.0 or later",
     inLanguage: "fr",
     license: URL_LICENCE,
+    isAccessibleForFree: true,
     codeRepository: URL_DEPOT,
     author: {
       "@type": "Person",
       name: AUTEUR,
-      url: URL_DEPOT,
+      url: URL_AUTEUR,
     },
     offers: {
       "@type": "Offer",

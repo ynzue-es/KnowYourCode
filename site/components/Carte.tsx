@@ -39,14 +39,14 @@ export function Carte({ titre, marque, children }: ProprietesCarte) {
         {marque ? (
           <span
             aria-hidden="true"
-            className="text-accent/70 font-mono text-xs tracking-widest"
+            className="text-accent/70 font-mono text-[0.68rem] tracking-widest"
           >
             {marque}
           </span>
         ) : null}
-        <h3 className="text-encre text-base font-semibold">{titre}</h3>
+        <h3 className="text-encre text-[0.95rem] font-semibold">{titre}</h3>
       </div>
-      <div className="text-attenue mt-3 space-y-3 text-[0.95rem] leading-relaxed">
+      <div className="text-attenue mt-2.5 space-y-2.5 text-[0.88rem] leading-relaxed">
         {children}
       </div>
     </article>
