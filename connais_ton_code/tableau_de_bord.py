@@ -3,10 +3,14 @@
 Il ne calcule rien : `statistiques.py` a déjà transformé l'historique en
 valeurs prêtes à afficher.
 
+La hiérarchie suit celle de l'exercice. La série de jours passe devant tout le
+reste, seule et en très grand, parce que c'est elle qu'on vient regarder et
+elle qu'on ne veut pas casser. Viennent ensuite les notions ratées, qui disent
+quoi réviser, puis le calendrier, où ce sont les trous qui parlent.
+
 Le choix des formes suit le travail que fait chaque donnée. Un chiffre qui
-résume se pose en grand plutôt qu'en graphique. Une évolution se lit en
-courbe. Une régularité se lit en calendrier, parce que ce sont les trous qui
-parlent. Une répartition se lit en barres, parce qu'on y compare des
+résume se pose en grand plutôt qu'en graphique. Une régularité se lit en
+calendrier. Des parts se lisent en barres, parce qu'on y compare des
 longueurs.
 
 Les couleurs suivent la même règle. Une série unique n'a rien à distinguer :
@@ -18,8 +22,8 @@ déficiente.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
+from PyQt6.QtCore import QRectF, Qt
+from PyQt6.QtGui import QColor, QPainter, QPaintEvent
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QToolTip, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -29,7 +33,7 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
-from .statistiques import Statistiques
+from .statistiques import Reussite, Statistiques
 
 LARGEUR = 560
 HAUTEUR = 440
@@ -53,11 +57,25 @@ _ECHELLE_ACTIVITE = ("#23262c", "#2b569f", "#3a72d0", "#4c8dff", "#7dabff")
 _BON = "#2fa87f"
 _MAUVAIS = "#c9821f"
 
+# Au-dessus, la notion est acquise et le chiffre n'a pas à alerter.
+_SEUIL_ACQUIS = 0.6
+
 _COTE_CASE = 18
 _ECART_CASE = 5
 _LARGEUR_JOURS = 26
-_HAUTEUR_COURBE = 124
 _HAUTEUR_BARRES = 104
+
+# Les catégories sont écrites sans accent dans les données, pour rester des
+# clés commodes ; l'écran, lui, mérite du français.
+_NOM_CATEGORIE = {
+    "langage": "Langage",
+    "robustesse": "Robustesse",
+    "securite": "Sécurité",
+}
+
+# Combien de lignes on montre avant que la liste cesse d'être une liste et
+# devienne un mur.
+_NOTIONS_MONTREES = 8
 
 
 class _Carte(QFrame):
@@ -91,10 +109,68 @@ class _Carte(QFrame):
             colonne.addWidget(precision)
 
 
+class _Serie(QFrame):
+    """La série de jours, seule sur sa ligne et deux fois plus grosse.
+
+    Elle ne partage pas la rangée des autres chiffres : mise à côté d'eux,
+    elle se lirait comme une statistique parmi d'autres, alors que c'est le
+    seul nombre qu'on perd en ne revenant pas.
+    """
+
+    def __init__(self, statistiques: Statistiques) -> None:
+        super().__init__()
+        self.setObjectName("serie")
+        self.setStyleSheet(
+            f"#serie {{ background-color: {_COULEUR_CARTE}; border-radius: 10px; }}"
+        )
+        self.setFixedHeight(112)
+
+        ligne = QHBoxLayout(self)
+        ligne.setContentsMargins(18, 12, 18, 12)
+        ligne.setSpacing(14)
+
+        jours = statistiques.serie_en_cours
+        chiffre = TitleLabel(str(jours), self)
+        chiffre.setStyleSheet(
+            f"color: {_ACCENT if jours else _COULEUR_ATTENUE}; font-size: 46px;"
+        )
+        ligne.addWidget(chiffre, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        colonne = QVBoxLayout()
+        colonne.setSpacing(2)
+        colonne.addStretch(1)
+        colonne.addWidget(
+            StrongBodyLabel("jour d'affilée" if jours == 1 else "jours d'affilée", self)
+        )
+
+        if statistiques.faite_aujourdhui:
+            etat = "C'est fait pour aujourd'hui."
+        elif jours:
+            etat = "Une carte aujourd'hui et la série tient."
+        else:
+            etat = "Une carte aujourd'hui et la série repart."
+        message = CaptionLabel(etat, self)
+        message.setStyleSheet(
+            f"color: {_BON if statistiques.faite_aujourdhui else _COULEUR_SECONDAIRE};"
+        )
+        colonne.addWidget(message)
+
+        record = CaptionLabel(
+            f"Meilleure série : {statistiques.meilleure_serie} jour(s) — "
+            f"{statistiques.jours_actifs} jour(s) d'activité en tout",
+            self,
+        )
+        record.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+        colonne.addWidget(record)
+        colonne.addStretch(1)
+
+        ligne.addLayout(colonne, 1)
+
+
 class _Calendrier(QWidget):
     """Douze semaines de régularité, une case par jour.
 
-    Ce sont les trous qui portent l'information, donc les jours sans réponse
+    Ce sont les trous qui portent l'information, donc les jours sans carte
     sont dessinés comme les autres, en creux.
     """
 
@@ -153,11 +229,11 @@ class _Calendrier(QWidget):
             if not self._case(index).contains(event.position()):
                 continue
             if jour.nombre == 0:
-                compte = "aucune réponse"
+                compte = "aucune carte"
             elif jour.nombre == 1:
-                compte = "1 réponse"
+                compte = "1 carte"
             else:
-                compte = f"{jour.nombre} réponses"
+                compte = f"{jour.nombre} cartes"
             QToolTip.showText(
                 event.globalPosition().toPoint(),
                 f"{jour.jour.strftime('%d/%m/%Y')} : {compte}",
@@ -167,101 +243,41 @@ class _Calendrier(QWidget):
         QToolTip.hideText()
 
 
-class _Courbe(QWidget):
-    """L'évolution des scores, série unique, dernier point nommé."""
-
-    def __init__(self, scores: list[int], moyenne: float, parent=None) -> None:
-        super().__init__(parent)
-        self._scores = scores
-        self._moyenne = moyenne
-        self.setFixedHeight(_HAUTEUR_COURBE)
-
-    def paintEvent(self, event: QPaintEvent) -> None:
-        if not self._scores:
-            return
-
-        peintre = QPainter(self)
-        peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        marge = 10.0
-        largeur = max(1.0, self.width() - 2 * marge - 32)
-        hauteur = self.height() - 2 * marge
-
-        def point(rang: int, score: int) -> QPointF:
-            pas = largeur / max(1, len(self._scores) - 1)
-            return QPointF(marge + rang * pas, marge + (100 - score) / 100 * hauteur)
-
-        # Repère de la moyenne, volontairement discret : c'est un niveau de
-        # référence, pas une donnée.
-        stylo = QPen(QColor(255, 255, 255, 30))
-        stylo.setWidthF(1)
-        peintre.setPen(stylo)
-        y_moyenne = marge + (100 - self._moyenne) / 100 * hauteur
-        peintre.drawLine(QPointF(marge, y_moyenne), QPointF(marge + largeur, y_moyenne))
-
-        chemin = QPainterPath()
-        for rang, score in enumerate(self._scores):
-            emplacement = point(rang, score)
-            if rang == 0:
-                chemin.moveTo(emplacement)
-            else:
-                chemin.lineTo(emplacement)
-
-        trait = QPen(QColor(_ACCENT))
-        trait.setWidthF(2)
-        trait.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        trait.setCapStyle(Qt.PenCapStyle.RoundCap)
-        peintre.setPen(trait)
-        peintre.setBrush(Qt.BrushStyle.NoBrush)
-        peintre.drawPath(chemin)
-
-        # Seul le dernier point est marqué et chiffré : nommer tous les points
-        # remplirait le graphique de nombres que personne ne lit.
-        dernier = point(len(self._scores) - 1, self._scores[-1])
-        peintre.setPen(Qt.PenStyle.NoPen)
-        peintre.setBrush(QColor(_ACCENT))
-        peintre.drawEllipse(dernier, 4.5, 4.5)
-
-        peintre.setPen(QColor(_COULEUR_SECONDAIRE))
-        peintre.drawText(
-            QRectF(dernier.x() + 8, dernier.y() - 10, 32, 20),
-            int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
-            str(self._scores[-1]),
-        )
-        peintre.end()
-
-
 class _Barres(QWidget):
-    """Répartition des notes, en barres horizontales."""
+    """Un taux de réussite par catégorie, en barres horizontales.
 
-    def __init__(self, tranches: list, parent=None) -> None:
+    Les barres vont de zéro à cent et non jusqu'au meilleur des trois : c'est
+    une part, pas un classement, et la ramener au maximum ferait passer 40 %
+    pour un bon score dès que les autres sont pires.
+    """
+
+    def __init__(self, reussites: list[Reussite], parent=None) -> None:
         super().__init__(parent)
-        self._tranches = tranches
-        self._maximum = max((tranche.nombre for tranche in tranches), default=0)
+        self._reussites = reussites
         self.setFixedHeight(_HAUTEUR_BARRES)
 
     def paintEvent(self, event: QPaintEvent) -> None:
-        if not self._tranches:
+        if not self._reussites:
             return
 
         peintre = QPainter(self)
         peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        largeur_libelle = 66.0
-        largeur_valeur = 26.0
+        largeur_libelle = 88.0
+        largeur_valeur = 68.0
         # Deux pixels de fond entre deux barres : sans cet écart, deux barres
         # voisines se lisent comme une seule.
-        hauteur = self.height() / len(self._tranches) - 2
+        hauteur = self.height() / len(self._reussites) - 2
         disponible = max(1.0, self.width() - largeur_libelle - largeur_valeur - 8)
 
-        for rang, tranche in enumerate(self._tranches):
+        for rang, reussite in enumerate(self._reussites):
             haut = rang * (hauteur + 2)
 
             peintre.setPen(QColor(_COULEUR_ATTENUE))
             peintre.drawText(
                 QRectF(0, haut, largeur_libelle, hauteur),
                 int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
-                tranche.libelle,
+                _NOM_CATEGORIE.get(reussite.sujet, reussite.sujet),
             )
 
             peintre.setPen(Qt.PenStyle.NoPen)
@@ -270,14 +286,13 @@ class _Barres(QWidget):
                 QRectF(largeur_libelle, haut + 3, disponible, hauteur - 6), 4, 4
             )
 
-            part = tranche.nombre / self._maximum if self._maximum else 0
-            if part > 0:
-                peintre.setBrush(QColor(_ACCENT))
+            if reussite.taux > 0:
+                peintre.setBrush(QColor(_CATEGORIES[rang % len(_CATEGORIES)]))
                 peintre.drawRoundedRect(
                     QRectF(
                         largeur_libelle,
                         haut + 3,
-                        max(8.0, disponible * part),
+                        max(8.0, disponible * reussite.taux),
                         hauteur - 6,
                     ),
                     4,
@@ -288,7 +303,7 @@ class _Barres(QWidget):
             peintre.drawText(
                 QRectF(self.width() - largeur_valeur, haut, largeur_valeur, hauteur),
                 int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight),
-                str(tranche.nombre),
+                f"{reussite.taux * 100:.0f} %  ({reussite.justes}/{reussite.total})",
             )
         peintre.end()
 
@@ -326,38 +341,33 @@ class TableauDeBord(QWidget):
         """Remplit la vue. Peut être rappelée autant de fois qu'on veut."""
         self._vider()
 
-        if statistiques.nombre_de_reponses == 0:
+        # Le seuil est le jour d'activité et non la carte : quelqu'un qui
+        # arrive de l'ancien exercice a une série à voir avant d'avoir répondu
+        # à sa première carte.
+        if statistiques.jours_actifs == 0:
             self._poser(self._message_vide())
             return
 
+        self._poser(_Serie(statistiques))
         self._poser(self._cartes(statistiques))
         self._poser(
             self._section(
                 "Régularité",
                 self._centrer(_Calendrier(statistiques.activite)),
                 "Une case par jour sur les douze dernières semaines. "
-                "Plus la case est claire, plus tu as répondu ce jour-là.",
+                "Plus la case est claire, plus tu as répondu de cartes ce jour-là.",
             )
         )
-        self._poser(
-            self._section(
-                "Évolution des scores",
-                _Courbe(statistiques.scores_recents, statistiques.score_moyen),
-                f"Les {len(statistiques.scores_recents)} dernières réponses. "
-                "Le trait horizontal marque la moyenne.",
+        if statistiques.notions:
+            self._poser(self._notions(statistiques))
+        if statistiques.categories:
+            self._poser(
+                self._section(
+                    "Par catégorie",
+                    _Barres(statistiques.categories),
+                    "La part de cartes réussies dans chaque famille de questions.",
+                )
             )
-        )
-        self._poser(
-            self._section(
-                "Répartition des notes", _Barres(statistiques.repartition_scores)
-            )
-        )
-        if statistiques.repartition_par_langage:
-            self._poser(self._langages(statistiques))
-        if statistiques.oublis_recents:
-            self._poser(self._oublis(statistiques))
-        if statistiques.fonctions_mal_expliquees:
-            self._poser(self._fonctions(statistiques))
 
     def _poser(self, bloc: QWidget) -> None:
         self._colonne.insertWidget(self._colonne.count() - 1, bloc)
@@ -391,8 +401,7 @@ class TableauDeBord(QWidget):
         colonne = QVBoxLayout(bloc)
         colonne.addStretch(1)
         message = BodyLabel(
-            "Réponds à ta première question pour voir tes statistiques apparaître ici.",
-            bloc,
+            "Réponds à tes premières cartes pour lancer ta série.", bloc
         )
         message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         message.setStyleSheet(f"color: {_COULEUR_SECONDAIRE};")
@@ -406,19 +415,16 @@ class TableauDeBord(QWidget):
         ligne.setContentsMargins(0, 0, 0, 0)
         ligne.setSpacing(10)
 
-        tendance = ""
-        if statistiques.tendance is not None:
-            signe = "+" if statistiques.tendance >= 0 else ""
-            tendance = f"{signe}{statistiques.tendance:.0f} sur les 5 dernières"
-
-        jours = statistiques.serie_en_cours
         for valeur, libelle, detail in (
-            (f"{statistiques.score_moyen:.0f}", "Score moyen", tendance),
-            (str(jours), "Jours d'affilée", "en cours" if jours else "série à relancer"),
             (
-                str(statistiques.nombre_de_reponses),
-                "Réponses",
-                f"{statistiques.nombre_de_passages} passée(s)",
+                f"{statistiques.taux_de_reussite * 100:.0f} %",
+                "Réussite",
+                f"{statistiques.nombre_de_justes} carte(s) juste(s)",
+            ),
+            (
+                str(statistiques.nombre_de_cartes),
+                "Cartes répondues",
+                f"{statistiques.nombre_de_passages} extrait(s) passé(s)",
             ),
             (
                 str(statistiques.fonctions_couvertes),
@@ -429,74 +435,28 @@ class TableauDeBord(QWidget):
             ligne.addWidget(_Carte(valeur, libelle, detail))
         return bloc
 
-    def _langages(self, statistiques: Statistiques) -> QWidget:
-        bloc = self._section("Par langage", None)
+    def _notions(self, statistiques: Statistiques) -> QWidget:
+        bloc = self._section(
+            "Les notions que tu rates",
+            None,
+            "Elles sont déjà triées : la première est celle à revoir.",
+        )
         colonne = bloc.layout()
-
-        for rang, langage in enumerate(statistiques.repartition_par_langage):
+        for notion in statistiques.notions[:_NOTIONS_MONTREES]:
             ligne = QHBoxLayout()
             ligne.setSpacing(8)
-
-            # La pastille porte l'identité, le texte reste en encre neutre :
-            # un libellé coloré se confondrait avec une donnée.
-            pastille = QFrame(bloc)
-            pastille.setFixedSize(9, 9)
-            pastille.setStyleSheet(
-                f"background-color: {_CATEGORIES[rang % len(_CATEGORIES)]};"
-                " border-radius: 4px;"
-            )
-            ligne.addWidget(pastille)
-            ligne.addWidget(BodyLabel(langage.langage, bloc))
+            ligne.addWidget(BodyLabel(notion.sujet, bloc))
             ligne.addStretch(1)
 
-            chiffres = CaptionLabel(
-                f"{langage.score_moyen:.0f} de moyenne sur "
-                f"{langage.nombre_de_reponses} réponse(s)",
-                bloc,
+            part = StrongBodyLabel(f"{notion.taux * 100:.0f} %", bloc)
+            part.setStyleSheet(
+                f"color: {_BON if notion.taux >= _SEUIL_ACQUIS else _MAUVAIS};"
             )
-            chiffres.setStyleSheet(f"color: {_COULEUR_SECONDAIRE};")
-            ligne.addWidget(chiffres)
-            colonne.addLayout(ligne)
-        return bloc
+            ligne.addWidget(part)
 
-    def _oublis(self, statistiques: Statistiques) -> QWidget:
-        bloc = self._section("Ce que tu oublies le plus", None)
-        colonne = bloc.layout()
-        for oubli in statistiques.oublis_recents[:8]:
-            ligne = BodyLabel(f"•  {oubli.point}", bloc)
-            ligne.setWordWrap(True)
-            colonne.addWidget(ligne)
-
-            source = CaptionLabel(f"     {oubli.nom_fonction}", bloc)
-            source.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
-            colonne.addWidget(source)
-        return bloc
-
-    def _fonctions(self, statistiques: Statistiques) -> QWidget:
-        bloc = self._section("Fonctions les moins bien expliquées", None)
-        colonne = bloc.layout()
-        for fonction in statistiques.fonctions_mal_expliquees[:6]:
-            ligne = QHBoxLayout()
-            ligne.setSpacing(8)
-
-            gauche = QVBoxLayout()
-            gauche.setSpacing(0)
-            gauche.addWidget(BodyLabel(fonction.nom_fonction, bloc))
-            chemin = CaptionLabel(fonction.chemin_fichier, bloc)
-            chemin.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
-            gauche.addWidget(chemin)
-            ligne.addLayout(gauche)
-            ligne.addStretch(1)
-
-            note = StrongBodyLabel(f"{fonction.score_moyen:.0f}", bloc)
-            note.setStyleSheet(
-                f"color: {_BON if fonction.score_moyen >= 60 else _MAUVAIS};"
-            )
-            ligne.addWidget(note)
-
-            fois = CaptionLabel(f"× {fonction.nombre_de_fois}", bloc)
-            fois.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
-            ligne.addWidget(fois)
+            detail = CaptionLabel(f"{notion.justes}/{notion.total}", bloc)
+            detail.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+            ligne.addWidget(detail)
             colonne.addLayout(ligne)
         return bloc
 

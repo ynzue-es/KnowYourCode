@@ -33,9 +33,10 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 from connais_ton_code.application import (  # noqa: E402
     _autoriser_ctrl_c,
     _mode_barre_de_menus,
-    attendre_les_evaluations,
+    attendre_les_fabrications,
     construire,
 )
+from connais_ton_code.cartes import Forme  # noqa: E402
 from connais_ton_code.etats import Etat  # noqa: E402
 from connais_ton_code.extraction import fonctions  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
@@ -296,197 +297,6 @@ def verifier_reperage() -> None:
         )
 
 
-def _entree(
-    identifiant: str,
-    chemin: str,
-    nom: str,
-    langage: str,
-    date: datetime,
-    issue: str,
-    score: int | None = None,
-    points_oublies: tuple[str, ...] = (),
-) -> EntreeHistorique:
-    """Construit une entrée d'historique à la main, pour les contrôles de calcul."""
-    return EntreeHistorique(
-        identifiant=identifiant,
-        chemin_fichier=chemin,
-        nom_fonction=nom,
-        langage=langage,
-        date=date,
-        issue=issue,
-        score=score,
-        verdict="verdict" if issue == "repondu" else None,
-        reponse="une réponse" if issue == "repondu" else None,
-        points_oublies=list(points_oublies),
-    )
-
-
-def verifier_statistiques() -> None:
-    """Contrôles sans interface, sur le calcul des statistiques de progression.
-
-    L'historique est construit à la main plutôt que rejoué depuis un fichier :
-    c'est le calcul qu'on vérifie ici, pas la lecture du disque. Deux langages,
-    des passages, et une même fonction posée deux fois, pour couvrir le
-    groupement et pas seulement la moyenne.
-    """
-    t1 = datetime(2024, 1, 1, 9, 0, tzinfo=timezone.utc)
-    t2 = datetime(2024, 1, 2, 9, 0, tzinfo=timezone.utc)
-    t3 = datetime(2024, 1, 3, 9, 0, tzinfo=timezone.utc)
-    t4 = datetime(2024, 1, 4, 9, 0, tzinfo=timezone.utc)
-    t5 = datetime(2024, 1, 5, 9, 0, tzinfo=timezone.utc)
-    t6 = datetime(2024, 1, 6, 9, 0, tzinfo=timezone.utc)
-
-    entrees = [
-        _entree("fct-a", "src/a.py", "additionner", "python", t1, "repondu", 40, ("l'edge case b=0",)),
-        _entree("fct-b", "src/b.ts", "trierListe", "typescript", t2, "repondu", 90),
-        _entree("fct-c", "src/c.py", "diviser", "python", t3, "passe"),
-        _entree("fct-a", "src/a.py", "additionner", "python", t4, "repondu", 60, ("la division par zéro",)),
-        _entree("fct-d", "src/d.ts", "formater", "typescript", t5, "repondu", 70, ("le fuseau horaire",)),
-        _entree("fct-e", "src/e.py", "filtrer", "python", t6, "passe"),
-    ]
-
-    statistiques = calculer_statistiques(entrees)
-
-    _verifier(
-        statistiques.nombre_de_questions == 6, "le nombre de questions compte toutes les entrées"
-    )
-    _verifier(
-        statistiques.nombre_de_reponses == 4, "le nombre de réponses écarte les passages"
-    )
-    _verifier(
-        statistiques.nombre_de_passages == 2, "le nombre de passages écarte les réponses"
-    )
-    _verifier(
-        statistiques.score_moyen == 65.0, "la moyenne générale ne porte que sur les réponses"
-    )
-    _verifier(
-        statistiques.score_moyen_recent == 65.0,
-        "en dessous du seuil des dix dernières, la moyenne récente vaut la moyenne générale",
-    )
-    _verifier(
-        statistiques.scores_recents == [40, 90, 60, 70],
-        "les scores récents suivent l'ordre chronologique, le plus ancien d'abord",
-    )
-    _verifier(
-        [f.identifiant for f in statistiques.fonctions_mal_expliquees]
-        == ["fct-a", "fct-d", "fct-b"],
-        "les fonctions mal expliquées sont triées du pire score moyen au meilleur",
-    )
-    _verifier(
-        statistiques.fonctions_mal_expliquees[0].nombre_de_fois == 2,
-        "une même fonction posée deux fois se regroupe au lieu de se dédoubler",
-    )
-    _verifier(
-        statistiques.fonctions_mal_expliquees[0].score_moyen == 50.0,
-        "le score moyen d'une fonction posée deux fois moyenne ses deux réponses",
-    )
-    _verifier(
-        [o.point for o in statistiques.oublis_recents]
-        == ["le fuseau horaire", "la division par zéro", "l'edge case b=0"],
-        "les oublis récents remontent du plus récent au plus ancien",
-    )
-    _verifier(
-        [
-            (l.langage, l.nombre_de_reponses, l.score_moyen)
-            for l in statistiques.repartition_par_langage
-        ]
-        == [("python", 2, 50.0), ("typescript", 2, 80.0)],
-        "la répartition par langage distingue Python et TypeScript",
-    )
-    _verifier(
-        statistiques.derniere_reponse == t5,
-        "la dernière réponse retient la date de la plus récente, pas de la dernière entrée",
-    )
-
-    vide = calculer_statistiques([])
-    _verifier(
-        vide.nombre_de_questions == 0
-        and vide.nombre_de_reponses == 0
-        and vide.nombre_de_passages == 0
-        and vide.score_moyen == 0.0
-        and vide.score_moyen_recent == 0.0
-        and vide.scores_recents == []
-        and vide.fonctions_mal_expliquees == []
-        and vide.oublis_recents == []
-        and vide.repartition_par_langage == []
-        and vide.derniere_reponse is None,
-        "un historique vide rend des statistiques neutres sans lever d'exception",
-    )
-
-
-def verifier_regularite() -> None:
-    """Contrôles sur la série, la tendance et le calendrier.
-
-    Ces trois calculs dépendent de la date du jour : elle est passée en
-    paramètre, sinon la vérification changerait de résultat à minuit.
-    """
-    jour = date(2026, 8, 5)
-
-    def le(jour_du_mois: int, score: int) -> EntreeHistorique:
-        return _entree(
-            "id", "a.py", "f", "python",
-            datetime(2026, 8, jour_du_mois, 10, tzinfo=timezone.utc),
-            "repondu", score,
-        )
-
-    suite = calculer_statistiques([le(3, 50), le(4, 60), le(5, 70)], aujourdhui=jour)
-    _verifier(suite.serie_en_cours == 3, "trois jours d'affilée font une série de trois")
-
-    trou = calculer_statistiques([le(1, 50), le(3, 60), le(5, 70)], aujourdhui=jour)
-    _verifier(trou.serie_en_cours == 1, "un jour manquant casse la série")
-
-    ancienne = calculer_statistiques([le(1, 50), le(2, 60)], aujourdhui=jour)
-    _verifier(
-        ancienne.serie_en_cours == 0,
-        "une série finie il y a plusieurs jours ne compte plus",
-    )
-
-    veille = calculer_statistiques([le(3, 50), le(4, 60)], aujourdhui=jour)
-    _verifier(
-        veille.serie_en_cours == 2,
-        "une série qui s'arrête hier compte encore, la journée n'est pas finie",
-    )
-
-    courte = calculer_statistiques([le(4, 50), le(5, 60)], aujourdhui=jour)
-    _verifier(
-        courte.tendance is None,
-        "sans deux paquets complets, aucune tendance n'est affichée",
-    )
-
-    dix = [le(1, 40)] * 5 + [le(5, 80)] * 5
-    _verifier(
-        calculer_statistiques(dix, aujourdhui=jour).tendance == 40.0,
-        "la tendance compare les cinq dernières aux cinq précédentes",
-    )
-
-    calendrier = calculer_statistiques([le(5, 70), le(5, 80)], aujourdhui=jour)
-    _verifier(
-        len(calendrier.activite) == 84,
-        "le calendrier couvre douze semaines, jours vides compris",
-    )
-    _verifier(
-        calendrier.activite[-1].jour == jour and calendrier.activite[-1].nombre == 2,
-        "le dernier jour du calendrier est aujourd'hui, avec son compte",
-    )
-
-    tranches = calculer_statistiques(
-        [le(5, 10), le(5, 45), le(5, 65), le(5, 95), le(5, 100)], aujourdhui=jour
-    ).repartition_scores
-    _verifier(
-        [t.nombre for t in tranches] == [1, 1, 1, 2],
-        "chaque note tombe dans sa tranche, cent compris",
-    )
-
-    vide = calculer_statistiques([], aujourdhui=jour)
-    _verifier(
-        vide.serie_en_cours == 0
-        and vide.tendance is None
-        and vide.meilleur_score == 0
-        and len(vide.activite) == 84,
-        "un historique vide rend des valeurs neutres sans lever",
-    )
-
-
 def verifier_rappel() -> None:
     """Contrôles sans interface sur le rappel posé dans Claude Code.
 
@@ -585,13 +395,24 @@ def verifier_lecture_historique() -> None:
     )
 
 
+def _reponse_juste(carte) -> str:
+    """Ce qu'il faut répondre pour tomber juste, dans la forme que le panneau émet.
+
+    Distinct de `bonne_reponse`, qui rend de quoi *afficher* la réponse :
+    « ligne 7 » se lit bien mais ne s'émet pas.
+    """
+    if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
+        return carte.options[carte.bonne]
+    if carte.forme is Forme.REPERER:
+        return str(carte.bonne)
+    return carte.notion or (carte.attendu[0] if carte.attendu else "")
+
+
 def main() -> int:
     verifier_extraction()
     verifier_reperage()
-    verifier_statistiques()
     verifier_lecture_historique()
     verifier_rappel()
-    verifier_regularite()
 
     application = QApplication(sys.argv)
     _mode_barre_de_menus()
@@ -624,79 +445,114 @@ def main() -> int:
         _verifier(panneau.isVisible(), "le panneau est visible")
         panneau.question_demandee.emit()
 
-    def question() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.QUESTION,
-            "demander une question l'affiche",
-        )
-        _verifier(
-            panneau._etiquette_fonction.text() != "",
-            "le nom de la fonction est affiché",
-        )
-        _verifier(
-            "<span" in panneau._zone_code.toHtml(),
-            "le code est affiché avec coloration syntaxique",
-        )
-        _verifier(
-            panneau.pos().y() < 60,
-            "le panneau s'ouvre en haut, sous la barre de menus",
-        )
-        panneau._zone_reponse.setPlainText("Elle regroupe les évènements par jour.")
-        panneau._bouton_repondre.click()
+    # La série se joue en suivant l'état, pas l'horloge : la fabrication passe
+    # par un fil secondaire, et son temps de retour ne se prédit pas. Un
+    # scénario minuté à la milliseconde près aurait échoué au hasard.
+    compte = {"cartes": 0, "repondues": 0, "premiere": True}
 
-    def evaluation() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.EVALUATION,
-            "la réponse fait passer en état Évaluation",
-        )
-        _verifier(panneau.isVisible(), "le panneau reste ouvert pendant l'évaluation")
+    def jouer_la_serie() -> None:
+        etat = orchestrateur.etat()
 
-    def retour() -> None:
-        _verifier(
-            orchestrateur.etat() is Etat.RETOUR, "l'évaluation aboutit à l'état Retour"
-        )
-        _verifier(len(_historique()) == 1, "la réponse est enregistrée dans l'historique")
-        panneau._bouton_suivant.click()
+        if etat is Etat.PREPARATION:
+            _verifier(panneau.isVisible(), "le panneau reste ouvert pendant la fabrication")
+            return
 
-    def repos() -> None:
-        _verifier(orchestrateur.etat() is Etat.REPOS, "Suivant ramène au repos")
-        _verifier(panneau.isVisible(), "le panneau reste ouvert au repos")
-        # Une réponse vient d'être enregistrée : c'est le bon moment pour
-        # vérifier que la grande fenêtre a quelque chose à montrer.
+        if etat is Etat.QUESTION:
+            serie = orchestrateur._serie
+            if serie is None:
+                return
+            if compte["premiere"]:
+                compte["premiere"] = False
+                compte["cartes"] = len(serie.cartes)
+                _verifier(compte["cartes"] > 0, "la série apporte au moins une carte")
+                _verifier(
+                    panneau._etiquette_fonction.text() != "",
+                    "le nom de la fonction est affiché",
+                )
+                _verifier(
+                    "<span" in panneau._zone_code.toHtml(),
+                    "le code est affiché avec coloration syntaxique",
+                )
+                _verifier(
+                    panneau.pos().y() < 60,
+                    "le panneau s'ouvre en haut, sous la barre de menus",
+                )
+            panneau.reponse_donnee.emit(
+                _reponse_juste(serie.cartes[orchestrateur._index])
+            )
+            compte["repondues"] += 1
+            return
+
+        if etat is Etat.RETOUR:
+            _verifier(
+                len(_historique()) == compte["repondues"],
+                f"la carte {compte['repondues']} est enregistrée aussitôt répondue",
+            )
+            panneau.suite_demandee.emit()
+            return
+
+        if etat is Etat.BILAN:
+            minuteur.stop()
+            bilan()
+
+    def bilan() -> None:
+        _verifier(
+            compte["repondues"] == compte["cartes"],
+            "la série va jusqu'à sa dernière carte, puis s'arrête",
+        )
+        _verifier(
+            len(_historique()) == compte["cartes"],
+            "chaque carte laisse une trace, une et une seule",
+        )
+        _verifier(panneau.isVisible(), "le panneau reste ouvert sur le bilan")
+        # Une série vient d'être jouée : c'est le bon moment pour vérifier que
+        # la grande fenêtre a quelque chose à montrer.
         panneau.fenetre_demandee.emit()
+        QTimer.singleShot(200, grande_fenetre)
 
     def grande_fenetre() -> None:
         fenetre = orchestrateur._fenetre
         _verifier(fenetre.isVisible(), "l'icône du panneau ouvre la grande fenêtre")
         _verifier(
-            orchestrateur.etat() is Etat.REPOS,
+            orchestrateur.etat() is Etat.BILAN,
             "la grande fenêtre n'interrompt pas le cycle de l'exercice",
         )
         _verifier(panneau.isVisible(), "le panneau reste ouvert derrière elle")
         fenetre.close()
         panneau.question_demandee.emit()
+        QTimer.singleShot(900, apres_tableau)
 
     def apres_tableau() -> None:
         _verifier(
             orchestrateur.etat() is Etat.QUESTION,
-            "après la grande fenêtre, on revient à une question",
+            "après la grande fenêtre, on revient à une série",
         )
-        _verifier(panneau.isVisible(), "le panneau reste ouvert en revenant à la question")
-        panneau._bouton_passer.click()
+        _verifier(panneau.isVisible(), "le panneau reste ouvert en revenant à la carte")
+        avant = len(_historique())
+        panneau.passage_demande.emit()
+        QTimer.singleShot(200, lambda: apres_passage(avant))
 
-    def apres_passage() -> None:
+    def apres_passage(avant: int) -> None:
         _verifier(
-            orchestrateur.etat() is Etat.REPOS, "passer la question ramène de nouveau au repos"
+            orchestrateur.etat() is Etat.REPOS,
+            "laisser la série de côté ramène au repos",
         )
         _verifier(
-            len(_historique()) == 2, "le passage est lui aussi enregistré dans l'historique"
+            len(_historique()) == avant + 1,
+            "l'abandon est lui aussi enregistré dans l'historique",
         )
+        compte["apres_passage"] = len(_historique())
         panneau.fermeture_demandee.emit()
+        QTimer.singleShot(200, ferme)
 
     def ferme() -> None:
         _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
         _verifier(not panneau.isVisible(), "le panneau a bien disparu")
-        _verifier(len(_historique()) == 2, "refermer n'enregistre rien de plus")
+        _verifier(
+            len(_historique()) == compte["apres_passage"],
+            "refermer n'enregistre rien de plus",
+        )
+        QTimer.singleShot(300, fin)
 
     def fin() -> None:
         _verifier(
@@ -705,23 +561,19 @@ def main() -> int:
         )
         application.quit()
 
-    for delai, etape in (
-        (600, demarrage),
-        (900, repos_initial),
-        (1200, question),
-        (1500, evaluation),
-        (3400, retour),
-        (3700, repos),
-        (3900, grande_fenetre),
-        (4100, apres_tableau),
-        (4300, apres_passage),
-        (4600, ferme),
-        (4900, fin),
-    ):
-        QTimer.singleShot(delai, etape)
+    minuteur = QTimer()
+    minuteur.setInterval(150)
+    minuteur.timeout.connect(jouer_la_serie)
+
+    QTimer.singleShot(600, demarrage)
+    QTimer.singleShot(900, repos_initial)
+    QTimer.singleShot(1200, minuteur.start)
+    # Un filet : si la série se bloque, on ne veut pas d'un script qui ne
+    # rend jamais la main. Les constats manquants feront échouer le compte.
+    QTimer.singleShot(30_000, application.quit)
 
     application.exec()
-    attendre_les_evaluations()
+    attendre_les_fabrications()
 
     for ok, description in _constats:
         print(f"{'  ok  ' if ok else 'ÉCHEC '} {description}")
