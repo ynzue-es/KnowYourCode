@@ -65,9 +65,10 @@ export default async function Accueil() {
               </h1>
 
               <p className="text-attenue mt-5 max-w-lg text-[0.92rem] leading-relaxed sm:text-base">
-                Un utilitaire de barre de menus pour macOS. Il tire au hasard
-                une fonction du projet en cours, vous demande de
-                l&apos;expliquer, et vous dit ce que vous avez oublié.
+                Un utilitaire de barre de menus pour macOS. Trois questions
+                rapides sur une fonction du projet en cours : vous répondez
+                d&apos;un clic, il vous explique pourquoi ce code est écrit
+                comme ça.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -143,7 +144,7 @@ export default async function Accueil() {
         <Section
           id="principe"
           surtitre="Le principe"
-          titre="Garder la maîtrise d'un code qu'on ne relit plus"
+          titre="Vous répondez court. L'application explique long."
           chapeau={
             <>
               <p>
@@ -153,8 +154,8 @@ export default async function Accueil() {
                 devine la fonction.
               </p>
               <p>
-                Le but n&apos;est pas de noter, mais de remettre une fonction
-                sous les yeux, à froid.
+                Trois ou quatre questions, un geste chacune. Puis un texte qui
+                dit pourquoi ce code est écrit comme ça.
               </p>
             </>
           }
@@ -165,15 +166,42 @@ export default async function Accueil() {
               className="bg-accent/40 absolute inset-y-8 left-0 w-px"
             />
             <blockquote className="text-encre text-lg leading-snug font-medium text-balance sm:text-xl">
-              « Rien ne s&apos;ouvre tout seul, jamais. C&apos;est vous qui
-              décidez du moment. »
+              « Le même “pourquoi” sur React, il y en a mille en ligne. Celui
+              qui parle de votre <Mono>ListeFiltrable</Mono>, il n&apos;y en a
+              qu&apos;un. »
             </blockquote>
             <figcaption className="text-attenue mt-3 max-w-2xl text-[0.88rem] leading-relaxed">
-              Pas de notification, pas de fenêtre qui surgit au milieu
-              d&apos;une phrase. L&apos;icône attend ; vous cliquez quand vous
-              avez deux minutes.
+              L&apos;explication nomme vos variables, pas celles d&apos;un
+              tutoriel. Juste ou faux, elle vient toujours.
             </figcaption>
           </figure>
+        </Section>
+
+        {/* ---------------------------------------------------- Les formes */}
+        <Section
+          id="questions"
+          surtitre="Les questions"
+          titre="Cinq formes, un geste chacune"
+          chapeau={
+            <p>
+              Rien à rédiger. La correction est locale : elle tombe à
+              l&apos;instant du clic, sans rien attendre du réseau.
+            </p>
+          }
+        >
+          <ul className="grid gap-4 sm:grid-cols-2">
+            <Forme nom="QCM">Que fait cette ligne ? Quatre options.</Forme>
+            <Forme nom="Repérer">
+              Quelle ligne empêche la fuite mémoire ? On clique la ligne.
+            </Forme>
+            <Forme nom="Prédire">
+              Ça vaut quoi au deuxième rendu ? Un mot.
+            </Forme>
+            <Forme nom="Vrai / faux">Deux secondes.</Forme>
+            <Forme nom="Nommer la notion">
+              Fermeture, décorateur, court-circuit, mémoïsation.
+            </Forme>
+          </ul>
         </Section>
 
         {/* ----------------------------------------------------- Surfaces */}
@@ -185,24 +213,26 @@ export default async function Accueil() {
             <p>
               L&apos;application n&apos;apparaît pas dans le Dock, et rien ne
               s&apos;ouvre au lancement : elle pose son icône dans la barre de
-              menus, en haut à droite, et attend.
+              menus, en haut à droite, et attend. Rien ne s&apos;ouvre tout
+              seul, jamais ; c&apos;est vous qui décidez du moment.
             </p>
           }
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <Carte titre="Le panneau" marque="01">
               <p>
-                Sous l&apos;icône, il ne contient que l&apos;exercice : le code,
-                une zone de saisie, le verdict. On y répond en trente secondes
-                et on retourne travailler.
+                Sous l&apos;icône, il ne contient que la série : le code, la
+                question, l&apos;explication. Une minute, et on retourne
+                travailler.
               </p>
             </Carte>
 
             <Carte titre="La grande fenêtre" marque="02">
               <p>
                 Au centre de l&apos;écran, ce qu&apos;on consulte en
-                s&apos;arrêtant : la progression et les réglages. Scores, courbe
-                des vingt derniers, oublis récurrents, répartition par langage.
+                s&apos;arrêtant : la progression et les réglages. Jours
+                d&apos;affilée, réussite par forme de question, notions qui
+                résistent, répartition par langage.
               </p>
             </Carte>
           </div>
@@ -257,7 +287,7 @@ export default async function Accueil() {
         <Section
           id="fonctionnement"
           surtitre="Comment ça marche"
-          titre="Du projet en cours au verdict"
+          titre="Du projet en cours aux questions"
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <Carte titre="Le projet en cours" marque="01">
@@ -277,21 +307,21 @@ export default async function Accueil() {
               </p>
             </Carte>
 
-            <Carte titre="L'évaluation" marque="03">
+            <Carte titre="Les cartes" marque="03">
               <p>
-                Le code et votre explication partent chez{" "}
-                <Mono>mistral-small-latest</Mono>. Un modèle tiers plutôt que
-                celui qui a écrit le code : on ne demande pas à quelqu&apos;un
-                de corriger la copie qu&apos;il a dictée.
+                Le code part chez <Mono>mistral-small-latest</Mono>, qui en tire
+                trois ou quatre questions, leurs réponses et leurs explications.
+                Un modèle tiers plutôt que celui qui a écrit le code : on ne
+                fait pas passer l&apos;interrogation à qui a dicté la copie.
               </p>
             </Carte>
 
-            <Carte titre="Les données locales" marque="04">
+            <Carte titre="La correction, sur place" marque="04">
               <p>
-                Tout reste sur la machine, en clair, dans{" "}
-                <Mono>~/.knowyourcode/</Mono>. Rien d&apos;autre n&apos;en sort
-                que la fonction tirée et votre explication, le temps de
-                l&apos;évaluation.
+                Tout arrive avant la première question : pendant la série, plus
+                rien n&apos;attend le réseau. Le reste vit en clair sur la
+                machine, dans <Mono>~/.knowyourcode/</Mono>, et rien n&apos;en
+                sort que la fonction tirée, le temps de fabriquer les cartes.
               </p>
             </Carte>
           </div>
@@ -312,7 +342,7 @@ export default async function Accueil() {
             </Etape>
 
             <Etape numero={2} titre="Fournir une clé d'API Mistral">
-              <p>L&apos;évaluation passe par l&apos;API Mistral.</p>
+              <p>Les cartes sont fabriquées par l&apos;API Mistral.</p>
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <BlocCode intitule="Variable d'environnement">
                   <Commande>
@@ -337,7 +367,7 @@ export default async function Accueil() {
               <p>
                 L&apos;icône se pose dans la barre de menus, en haut à droite.
                 Rien n&apos;apparaît dans le Dock. Un clic ouvre le panneau, et
-                vous réclamez une question quand vous le voulez.
+                vous réclamez une série quand vous le voulez.
               </p>
             </Etape>
           </ol>
@@ -347,9 +377,9 @@ export default async function Accueil() {
               <span className="text-encre font-medium">
                 Sans clé, l&apos;application démarre quand même
               </span>{" "}
-              et rend une évaluation factice : tout le reste fonctionne, il
-              n&apos;y a que le verdict qui est faux. De quoi faire le tour de
-              l&apos;interface avant de décider.
+              et pose des cartes factices : tout le reste fonctionne, il
+              n&apos;y a que les questions qui sont creuses. De quoi faire le
+              tour de l&apos;interface avant de décider.
             </p>
             <p className="mt-3">
               L&apos;installation depuis les sources est décrite dans le{" "}
@@ -381,7 +411,7 @@ export default async function Accueil() {
                   id="fin-titre"
                   className="text-encre text-lg font-semibold text-balance sm:text-2xl"
                 >
-                  Prenez une question quand vous avez deux minutes.
+                  Trois questions quand vous avez une minute.
                 </h2>
                 <p className="text-attenue mt-2 font-mono text-[0.7rem] sm:text-xs">
                   {precisions}
@@ -458,6 +488,20 @@ function Mono({ children }: { children: ReactNode }) {
     <code className="bg-panneau-clair border-bordure text-encre rounded-md border px-1.5 py-0.5 font-mono text-[0.85em] whitespace-nowrap">
       {children}
     </code>
+  );
+}
+
+/** Une forme de question : son nom, et ce qu'elle demande. */
+function Forme({ nom, children }: { nom: string; children: ReactNode }) {
+  return (
+    <li className="border-bordure bg-panneau/60 rounded-xl border px-4 py-3">
+      <p className="text-accent/80 font-mono text-[0.68rem] tracking-[0.14em] uppercase">
+        {nom}
+      </p>
+      <p className="text-attenue mt-1 text-[0.88rem] leading-relaxed">
+        {children}
+      </p>
+    </li>
   );
 }
 

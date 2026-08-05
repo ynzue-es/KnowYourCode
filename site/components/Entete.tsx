@@ -6,6 +6,7 @@ import { Logo } from "@/components/Logo";
 
 const NAVIGATION = [
   { id: "principe", intitule: "Le principe" },
+  { id: "questions", intitule: "Les questions" },
   { id: "surfaces", intitule: "Les surfaces" },
   { id: "rappel", intitule: "Le rappel" },
   { id: "fonctionnement", intitule: "Fonctionnement" },
