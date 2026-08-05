@@ -56,18 +56,16 @@ export default async function Accueil() {
               </span>
 
               <h1 className="text-encre mt-6 text-[2rem] leading-[1.15] font-semibold tracking-tight text-balance sm:text-6xl sm:leading-tight">
-                Connaître son code
+                On délègue le code.
                 <span className="text-attenue block">
-                  plutôt que son client.
+                  Pas la compréhension.
                 </span>
               </h1>
 
               <p className="text-attenue mt-6 max-w-xl text-base leading-relaxed sm:text-lg">
-                Un utilitaire de barre de menus pour macOS. Quand vous avez un
-                moment, vous ouvrez son panneau : il tire au hasard une fonction
-                du projet en cours et vous demande de l&apos;expliquer. Un
-                modèle tiers compare votre explication au code et vous dit ce
-                que vous avez oublié.
+                Un utilitaire de barre de menus pour macOS. Il tire au hasard
+                une fonction du projet en cours, vous demande de
+                l&apos;expliquer, et vous dit ce que vous avez oublié.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -88,7 +86,9 @@ export default async function Accueil() {
                 </a>
               </div>
 
-              <p className="text-discret mt-6 font-mono text-xs">{precisions}</p>
+              <p className="text-discret mt-6 font-mono text-xs">
+                {precisions}
+              </p>
 
               {publieeLe ? (
                 <p className="text-discret mt-1.5 font-mono text-xs">
@@ -134,10 +134,8 @@ export default async function Accueil() {
                 devine la fonction.
               </p>
               <p>
-                Le but n&apos;est pas de noter. C&apos;est de remettre une
-                fonction sous les yeux, à froid, et de demander de
-                l&apos;expliquer avec ses mots — en s&apos;entraînant au
-                passage sur Python et TypeScript.
+                Le but n&apos;est pas de noter, mais de remettre une fonction
+                sous les yeux, à froid.
               </p>
             </>
           }
@@ -152,10 +150,9 @@ export default async function Accueil() {
               décidez du moment. »
             </blockquote>
             <figcaption className="text-attenue mt-4 max-w-2xl text-[0.95rem] leading-relaxed">
-              Pas de notification à l&apos;heure dite, pas de fenêtre qui
-              surgit au milieu d&apos;une phrase. L&apos;icône attend dans la
-              barre de menus. Vous cliquez quand vous avez deux minutes, et
-              vous refermez quand vous n&apos;en avez plus.
+              Pas de notification, pas de fenêtre qui surgit au milieu
+              d&apos;une phrase. L&apos;icône attend ; vous cliquez quand vous
+              avez deux minutes.
             </figcaption>
           </figure>
         </Section>
@@ -176,42 +173,20 @@ export default async function Accueil() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Carte titre="Le panneau" marque="01">
               <p>
-                Sous l&apos;icône, il ne contient que l&apos;exercice : le
-                chemin du fichier, le nom de la fonction, le code coloré, une
-                zone de saisie, le verdict. On y répond en trente secondes et
-                on retourne travailler.
-              </p>
-              <p>
-                Vous répondez avec Cmd+Entrée, ou vous passez.
-                L&apos;évaluation part hors du fil de l&apos;interface : le
-                panneau reste utilisable pendant l&apos;attente.
+                Sous l&apos;icône, il ne contient que l&apos;exercice : le code,
+                une zone de saisie, le verdict. On y répond en trente secondes
+                et on retourne travailler.
               </p>
             </Carte>
 
             <Carte titre="La grande fenêtre" marque="02">
               <p>
-                Au centre de l&apos;écran, une fenêtre ordinaire avec sa barre
-                latérale, elle porte ce qu&apos;on consulte en s&apos;arrêtant :
-                la progression et les réglages. Elle s&apos;ouvre par
-                l&apos;icône en bas à gauche du panneau, et se ferme d&apos;un
-                Esc.
-              </p>
-              <p>
-                La progression montre le nombre de réponses, le score moyen et
-                le score récent, la courbe des vingt derniers scores, ce qui
-                revient le plus souvent dans les oublis, les fonctions les
-                moins bien expliquées et la répartition par langage.
+                Au centre de l&apos;écran, ce qu&apos;on consulte en
+                s&apos;arrêtant : la progression et les réglages. Scores, courbe
+                des vingt derniers, oublis récurrents, répartition par langage.
               </p>
             </Carte>
           </div>
-
-          <p className="text-discret mt-6 max-w-3xl text-sm leading-relaxed">
-            La grande fenêtre ne touche pas au cycle de l&apos;exercice : on
-            peut la consulter pendant qu&apos;une question attend sa réponse.
-            Tant que rien n&apos;a été répondu, la progression dit simplement
-            qu&apos;il n&apos;y a encore rien à montrer, plutôt que
-            d&apos;afficher des zéros qui ne diraient rien.
-          </p>
         </Section>
 
         {/* ------------------------------------------------------- Rappel */}
@@ -222,9 +197,9 @@ export default async function Accueil() {
           chapeau={
             <p>
               Une notification suppose une autorisation du système et disparaît
-              en trois secondes. Le compteur d&apos;attente de Claude Code,
-              lui, est déjà sous les yeux à chaque tour. C&apos;est là que le
-              rappel se glisse.
+              en trois secondes. Le compteur d&apos;attente de Claude Code, lui,
+              est déjà sous les yeux à chaque tour. C&apos;est là que le rappel
+              se glisse.
             </p>
           }
         >
@@ -232,20 +207,15 @@ export default async function Accueil() {
 
           <div className="text-attenue mt-8 grid gap-8 text-[0.95rem] leading-relaxed lg:grid-cols-2">
             <p>
-              L&apos;interrupteur des réglages, dans la grande fenêtre, écrit
-              un bloc <Mono>spinnerVerbs</Mono> dans{" "}
-              <Mono>~/.claude/settings.json</Mono>, avec une quinzaine de
-              phrases. L&apos;éteindre retire le bloc et rend à Claude Code ses
-              propres verbes. Dans les deux sens, le reste du fichier est
-              conservé, et il faut redémarrer Claude Code pour voir le
-              changement.
+              Un interrupteur dans les réglages écrit un bloc{" "}
+              <Mono>spinnerVerbs</Mono> dans{" "}
+              <Mono>~/.claude/settings.json</Mono>. L&apos;éteindre rend à
+              Claude Code ses propres verbes.
             </p>
             <p>
               Pour écrire les vôtres, posez un tableau JSON dans{" "}
-              <Mono>~/.knowyourcode/phrases.json</Mono>. Elles s&apos;écrivent
-              nues : la balise est ajoutée à la pose, et toute phrase dépassant
-              soixante caractères une fois habillée est écartée — Claude Code
-              la couperait au milieu d&apos;un mot.
+              <Mono>~/.knowyourcode/phrases.json</Mono> — sans la balise, elle
+              est ajoutée à la pose.
             </p>
           </div>
 
@@ -269,12 +239,6 @@ export default async function Accueil() {
           id="fonctionnement"
           surtitre="Comment ça marche"
           titre="Du projet en cours au verdict"
-          chapeau={
-            <p>
-              Quatre briques, chacune doublée d&apos;une version factice dont
-              se sert la vérification automatique du dépôt.
-            </p>
-          }
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <Carte titre="Le projet en cours" marque="01">
@@ -288,42 +252,27 @@ export default async function Accueil() {
 
             <Carte titre="La sélection" marque="02">
               <p>
-                Une fonction de 4 à 60 lignes, tirée au hasard dans ce projet.
-                Les fonctions Python sont repérées avec <Mono>ast</Mono>, les
-                fonctions TypeScript et TSX par un comptage d&apos;accolades
-                qui saute les chaînes et les commentaires.
-              </p>
-              <p>
-                Au hasard, et non « la plus récente » : le code qu&apos;on ne
-                comprend plus n&apos;est pas toujours celui qu&apos;on vient
-                d&apos;écrire.
+                Une fonction de 4 à 60 lignes, tirée au hasard — et non « la
+                plus récente » : le code qu&apos;on ne comprend plus n&apos;est
+                pas toujours celui qu&apos;on vient d&apos;écrire.
               </p>
             </Carte>
 
             <Carte titre="L'évaluation" marque="03">
               <p>
                 Le code et votre explication partent chez{" "}
-                <Mono>mistral-small-latest</Mono>, qui rend un verdict, une
-                note et la liste de ce que vous n&apos;avez pas mentionné.
-              </p>
-              <p>
-                Un modèle tiers plutôt que celui qui a écrit le code : on ne
-                demande pas à quelqu&apos;un de corriger la copie qu&apos;il a
-                dictée.
+                <Mono>mistral-small-latest</Mono>. Un modèle tiers plutôt que
+                celui qui a écrit le code : on ne demande pas à quelqu&apos;un
+                de corriger la copie qu&apos;il a dictée.
               </p>
             </Carte>
 
             <Carte titre="Les données locales" marque="04">
               <p>
                 Tout reste sur la machine, en clair, dans{" "}
-                <Mono>~/.knowyourcode/</Mono>. L&apos;historique garde les
-                questions posées, la réponse donnée, l&apos;évaluation et la
-                date : de quoi ne pas reposer deux fois la même question, et
-                mesurer la progression.
-              </p>
-              <p>
-                Rien d&apos;autre ne quitte la machine que la fonction tirée et
-                votre explication, le temps de l&apos;évaluation.
+                <Mono>~/.knowyourcode/</Mono>. Rien d&apos;autre n&apos;en sort
+                que la fonction tirée et votre explication, le temps de
+                l&apos;évaluation.
               </p>
             </Carte>
           </div>
@@ -344,10 +293,7 @@ export default async function Accueil() {
             </Etape>
 
             <Etape numero={2} titre="Fournir une clé d'API Mistral">
-              <p>
-                L&apos;évaluation passe par l&apos;API Mistral. Deux façons de
-                donner la clé, au choix.
-              </p>
+              <p>L&apos;évaluation passe par l&apos;API Mistral.</p>
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <BlocCode intitule="Variable d'environnement">
                   <Commande>
@@ -363,9 +309,8 @@ export default async function Accueil() {
                 </BlocCode>
               </div>
               <p className="mt-4">
-                La seconde ne dépend pas de l&apos;environnement du terminal :
-                c&apos;est celle à préférer pour une application lancée depuis
-                le Finder.
+                La seconde ne dépend pas du terminal : c&apos;est celle à
+                préférer pour une application lancée depuis le Finder.
               </p>
             </Etape>
 
@@ -394,8 +339,8 @@ export default async function Accueil() {
                 className="text-encre hover:text-accent underline underline-offset-4 transition-colors"
               >
                 dépôt
-              </a>{" "}
-              : Python 3.10 ou plus récent, et une commande.
+              </a>
+              .
             </p>
           </div>
         </Section>

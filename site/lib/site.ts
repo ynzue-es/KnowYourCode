@@ -11,7 +11,8 @@ export const ADRESSE =
 
 export const NOM = "KnowYourCode";
 
-export const TITRE = "KnowYourCode — connaître son code plutôt que son client";
+export const TITRE =
+  "KnowYourCode — on délègue le code, pas la compréhension";
 
 export const DESCRIPTION =
   "Un utilitaire de barre de menus pour macOS. Il tire au hasard une fonction " +

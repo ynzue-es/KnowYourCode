@@ -1,7 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt =
-  "KnowYourCode — connaître son code plutôt que son client";
+export const alt = "KnowYourCode — on délègue le code, pas la compréhension";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -61,7 +60,7 @@ export default function Image() {
               lineHeight: 1.35,
             }}
           >
-            Connaître son code plutôt que son client.
+            On délègue le code. Pas la compréhension.
           </div>
         </div>
 
