@@ -161,11 +161,9 @@ class Orchestrateur(QObject):
         if not parus or not self._reveil_actif:
             return
 
+        # Le seul refus qui reste : une série est déjà ouverte. Rouvrir
+        # dessus ferait perdre les réponses en cours.
         if self._etat is not Etat.FERME:
-            return
-        if calculer_statistiques(self._historique.entrees()).faite_aujourdhui:
-            # La série du jour est faite : on a assez demandé. Le compteur de
-            # jours est tenu, le reste serait du harcèlement.
             return
 
         self.ouvrir()

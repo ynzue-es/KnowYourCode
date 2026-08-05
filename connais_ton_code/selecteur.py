@@ -37,10 +37,17 @@ RETENUS_ASSEZ = 24
 # L'appoint est plafonné, et c'est tout l'intérêt du barème : sans plafond,
 # une fonction longue et bavarde finirait par passer devant un extrait qui
 # porte un vrai piège, alors qu'elle n'a que le nombre pour elle. Avec ces
-# valeurs, un extrait bourré de tournures courantes plafonne à 45 et ne
-# rattrape jamais la moindre notion isolée, qui vaut 55.
-APPOINT_RICHESSE = 5
+# valeurs, un extrait bourré de tournures courantes plafonne à 54 et ne
+# rattrape jamais la moindre notion, qui part de 55. C'est ce qui fixe
+# l'appoint : la plus grande valeur qui préserve encore cet ordre.
+APPOINT_RICHESSE = 8
 REPERES_EN_APPOINT = 3
+
+# Une série tient sur un seul extrait : une fonction qui ne porte qu'un repère
+# ne peut donner qu'une carte, et une carte n'est pas une série. Sur ce dépôt,
+# c'est le cas d'une fonction tirable sur deux — d'où les ouvertures qui ne
+# posaient qu'une question. On les écarte, sauf s'il ne reste qu'elles.
+REPERES_MIN = 2
 
 def _autre_copie(dossier: Path) -> bool:
     """Dit si ce dossier est une autre copie du dépôt plutôt qu'un sous-dossier.
@@ -161,14 +168,21 @@ class SelecteurProjet:
         random.shuffle(echantillon)
 
         retenus: list[tuple[Extrait, int]] = []
+        maigres: list[tuple[Extrait, int]] = []
         for extrait in echantillon[:ANALYSES_MAX]:
             reperes = reperer(extrait.code, extrait.langage)
             if not reperes:
                 continue
+            if len(reperes) < REPERES_MIN:
+                maigres.append((extrait, poids_de(reperes)))
+                continue
             retenus.append((extrait, poids_de(reperes)))
             if len(retenus) >= RETENUS_ASSEZ:
                 break
-        return retenus
+
+        # Un petit projet peut n'avoir que des fonctions à repère unique. Une
+        # seule carte vaut mieux qu'une fenêtre vide, mais en dernier recours.
+        return retenus or maigres
 
     def _recenser(self, dossier: Path) -> list[Extrait]:
         extraits: list[Extrait] = []

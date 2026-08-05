@@ -22,8 +22,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from connais_ton_code.modeles import Extrait  # noqa: E402
 from connais_ton_code.reperage import (  # noqa: E402
     POIDS_COURANT,
+    POIDS_NOTION,
     POIDS_SECURITE,
     Repere,
     reperer,
@@ -33,6 +35,7 @@ from connais_ton_code.selecteur import (  # noqa: E402
     ANALYSES_MAX,
     APPOINT_RICHESSE,
     REPERES_EN_APPOINT,
+    REPERES_MIN,
     SelecteurFactice,
     SelecteurProjet,
     poids_de,
@@ -66,6 +69,19 @@ _LOURDE = '''def executer_requete(curseur, table, valeur):
     for ligne in curseur.fetchall():
         lignes.append(ligne)
     return lignes
+'''
+
+# Trois repères sur six lignes : de quoi tenir une série. Les deux autres
+# fixtures n'en portent qu'un chacune, ce qui les met sous le plancher — c'est
+# précisément ce qui permet de vérifier que le plancher trie.
+_RICHE = '''def charger(table, valeur, cache={}):
+    if table in cache:
+        return cache[table]
+    try:
+        resultat = eval(valeur)
+    except:
+        resultat = None
+    return resultat
 '''
 
 _LEGERE = '''def lister_actifs(elements):
@@ -116,6 +132,54 @@ def verifier_le_bareme() -> None:
     _verifier(
         poids_de([courant] * 12) < poids_de([securite]),
         "aucune accumulation de tournures courantes ne rattrape un repère lourd",
+    )
+
+    # C'est cette comparaison qui fixe l'appoint, et c'est la plus serrée : 54
+    # contre 55. La relâcher ferait passer une fonction bavarde devant un
+    # extrait qui porte une vraie notion — exactement ce que le barème refuse.
+    notion = Repere(ligne=1, intitule="", categorie="langage", poids=POIDS_NOTION)
+    _verifier(
+        poids_de([courant] * 12) < poids_de([notion]),
+        "ni la moindre notion, qui est la marge la plus étroite du barème",
+    )
+
+
+def verifier_le_plancher_de_reperes() -> None:
+    """Une carte n'est pas une série : les extraits trop pauvres sont écartés."""
+    selecteur = SelecteurProjet()
+
+    maigre = Extrait(
+        identifiant="maigre.py:maigre",
+        chemin_fichier="maigre.py",
+        nom_fonction="maigre",
+        langage="python",
+        code=_LEGERE,
+    )
+    riche = Extrait(
+        identifiant="riche.py:riche",
+        chemin_fichier="riche.py",
+        nom_fonction="riche",
+        langage="python",
+        code=_RICHE,
+    )
+
+    _verifier(
+        len(reperer(_LEGERE, "python")) < REPERES_MIN <= len(reperer(_RICHE, "python")),
+        "le corpus de référence encadre bien le plancher",
+    )
+
+    peses = selecteur._peser([maigre, riche])
+    _verifier(
+        [extrait.nom_fonction for extrait, _ in peses] == ["riche"],
+        "un extrait à repère unique est écarté quand il y a mieux",
+    )
+
+    # Le repli compte autant que le plancher : un petit projet où rien n'est
+    # riche doit encore poser une question, pas rester muet.
+    _verifier(
+        [extrait.nom_fonction for extrait, _ in selecteur._peser([maigre])]
+        == ["maigre"],
+        "faute de mieux, l'extrait pauvre est repris plutôt que rien",
     )
 
 
@@ -338,6 +402,7 @@ def verifier_les_copies() -> None:
 
 def main() -> int:
     verifier_le_bareme()
+    verifier_le_plancher_de_reperes()
     verifier_les_copies()
     verifier_le_corpus_de_reference()
     verifier_les_refus()

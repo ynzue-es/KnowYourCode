@@ -290,6 +290,46 @@ def verifier_douane() -> None:
     _verifier(serie is None, "si aucune carte ne survit, la série vaut None")
 
 
+def verifier_le_numero_de_ligne() -> None:
+    """Le numéro de ligne se lit sous toutes les formes que le modèle emploie.
+
+    Le code est soumis numéroté, et le modèle recopie volontiers la ligne
+    entière au lieu de son seul numéro. Exiger un entier nu coûtait les trois
+    quarts d'une série pour une question de forme : trois cartes sur quatre
+    étaient jetées alors qu'elles désignaient la bonne ligne.
+    """
+    for valeur, attendu in (
+        (1, "un entier nu"),
+        ("1", "un entier en chaîne"),
+        (" 1 ", "un entier entouré d'espaces"),
+        ("  1 | def charger_reglages(chemin):", "la ligne entière recopiée"),
+        ("1 | def charger_reglages(chemin):", "la ligne sans son alignement"),
+    ):
+        serie = _Bouchon(
+            _reponse(dict(_CARTE_QCM, ligne=valeur))
+        ).fabriquer(_extrait())
+        _verifier(
+            serie is not None and serie.cartes[0].ligne == 1,
+            f"le numéro de ligne se lit quand le modèle rend {attendu}",
+        )
+
+    # L'indulgence s'arrête là : elle ne sert qu'à retrouver un numéro, jamais
+    # à en inventer un. Une ligne qu'on n'a pas désignée reste écartée.
+    for valeur, ce_que_c_est in (
+        (True, "un booléen, qui vaudrait la ligne 1 en Python"),
+        ("quatre", "un nombre écrit en toutes lettres"),
+        ("", "une valeur vide"),
+        (None, "rien du tout"),
+    ):
+        serie = _Bouchon(
+            _reponse(dict(_CARTE_QCM, ligne=valeur), _CARTE_REPERER)
+        ).fabriquer(_extrait())
+        _verifier(
+            serie is not None and len(serie.cartes) == 1,
+            f"une carte est jetée quand sa ligne est {ce_que_c_est}",
+        )
+
+
 def verifier_pannes() -> None:
     """Aucune panne ne remonte : tout se traduit par `None`."""
     _verifier(
@@ -436,6 +476,7 @@ def verifier_factice() -> None:
 def main() -> int:
     verifier_lecture()
     verifier_douane()
+    verifier_le_numero_de_ligne()
     verifier_pannes()
     verifier_sans_repere()
     verifier_cache()

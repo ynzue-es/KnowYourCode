@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import ssl
 import time
 import urllib.request
@@ -469,11 +470,29 @@ def _en_carte(brute: Any, par_ligne: dict[int, Repere]) -> Carte | None:
 
 
 def _entier(valeur: Any) -> int:
-    """Un entier, ou `-1` — que la douane rejettera comme hors bornes."""
-    try:
-        return int(valeur)
-    except (TypeError, ValueError):
+    """Un entier, ou `-1` — que la douane rejettera comme hors bornes.
+
+    Le code est soumis numéroté, et le modèle recopie volontiers la ligne
+    entière au lieu de son seul numéro : `"  3 |     except OSError:"`. Refuser
+    ces cartes coûtait les trois quarts d'une série pour une question de forme,
+    alors qu'on sait très bien lire ce qu'elles désignent.
+
+    Être indulgent ici ne coûte rien : le numéro obtenu doit ensuite tomber sur
+    une ligne que le repérage a désignée. Un nombre inventé est écarté juste
+    après, par un contrôle qui, lui, ne se relâche pas.
+    """
+    # `True` est un entier pour Python. Le laisser passer ferait viser la
+    # ligne 1, qui existe toujours.
+    if isinstance(valeur, bool):
         return -1
+    if isinstance(valeur, (int, float)):
+        return int(valeur)
+
+    tete = _NOMBRE_DE_TETE.match(str(valeur).strip())
+    return int(tete.group(1)) if tete else -1
+
+
+_NOMBRE_DE_TETE = re.compile(r"(\d+)")
 
 
 def _flottant(valeur: Any) -> float:

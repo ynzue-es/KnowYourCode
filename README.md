@@ -197,8 +197,9 @@ nom contient lui-même un tiret.
 
 **L'ouverture automatique** (`reveil.py`) lit les mêmes transcripts, mais au
 fil de l'eau : une ligne `user` d'origine humaine y apparaît à l'instant où un
-prompt part. Le panneau s'ouvre alors, si la série du jour n'est pas déjà
-faite. Ni hook dans `settings.json`, qui demanderait de redémarrer Claude Code
+prompt part. Le panneau s'ouvre alors, à moins qu'une série ne soit déjà en
+cours — rouvrir dessus ferait perdre les réponses données. C'est le seul refus :
+un prompt, une série. Ni hook dans `settings.json`, qui demanderait de redémarrer Claude Code
 et de modifier un fichier partagé avec d'autres outils, ni lecture du réseau,
 qui est chiffré et bavarde en continu pendant que Claude travaille. Le réglage
 est éteint par défaut ; l'allumer n'installe rien, il n'y a donc rien à
