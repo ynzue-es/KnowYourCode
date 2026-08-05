@@ -92,7 +92,7 @@ export function Entete({ lienTelechargement }: ProprietesEntete) {
         style={{ transform: `scaleX(${avancement})` }}
       />
 
-      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-6 px-6">
+      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:gap-6 sm:px-6">
         <a href="#haut" className="flex shrink-0 items-center gap-2.5 rounded-md">
           <Logo taille={26} className="rounded-[7px]" />
           <span className="text-encre text-sm font-semibold tracking-tight">

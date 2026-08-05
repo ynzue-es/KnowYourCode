@@ -12,35 +12,38 @@ import { colorer } from "@/lib/coloration";
 
 const CHEMIN = "connais_ton_code/selection.py";
 
-const SOURCE = `def fonctions_du_fichier(chemin: Path) -> list[Fonction]:
-    """Les fonctions d'un fichier Python, repérées avec ast."""
+/* Les lignes sont tenues sous quarante caractères. Le code ne se recompose
+   pas : sur un téléphone, une ligne plus longue serait rognée sans recours. */
+const SOURCE = `def fonctions_du_fichier(chemin):
+    """Les fonctions du fichier."""
+    source = chemin.read_text()
     try:
-        arbre = ast.parse(chemin.read_text(encoding="utf-8"))
-    except (SyntaxError, UnicodeDecodeError):
+        arbre = ast.parse(source)
+    except SyntaxError:
         return []
 
     retenues = []
     for noeud in ast.walk(arbre):
-        if not isinstance(noeud, ast.FunctionDef):
+        if not est_fonction(noeud):
             continue
-        lignes = noeud.end_lineno - noeud.lineno + 1
-        if MIN_LIGNES <= lignes <= MAX_LIGNES:
-            retenues.append(Fonction(noeud.name, lignes))
+        taille = longueur(noeud)
+        if MIN <= taille <= MAX:
+            retenues.append(noeud.name)
     return retenues`;
 
 const REPONSE =
   "Elle lit le fichier, le parse avec ast, parcourt l'arbre et garde les " +
-  "définitions de fonctions dont la longueur tient entre les deux bornes. " +
-  "Un fichier illisible renvoie une liste vide.";
+  "fonctions dont la taille tient entre les deux bornes. Un fichier au " +
+  "code invalide renvoie une liste vide.";
 
 const NOTE = 8;
 
 const RESUME = "Le mécanisme est juste, la sélection aussi.";
 
 const OUBLIS = [
-  "L'encodage est forcé en UTF-8 à la lecture.",
-  "UnicodeDecodeError est rattrapé au même titre qu'une erreur de syntaxe.",
-  "ast.walk descend dans tout l'arbre : les fonctions imbriquées sont incluses.",
+  "Les bornes MIN et MAX sont inclusives.",
+  "ast.walk descend dans tout l'arbre : les fonctions imbriquées comptent.",
+  "La lecture est hors du try — un fichier illisible remonte l'erreur.",
 ];
 
 /** Les quatre temps du tour, dans l'ordre. */
@@ -143,7 +146,7 @@ export function DemoExercice() {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       {/* ------------------------------------------------ Barre de la fenêtre */}
-      <div className="border-bordure flex items-center gap-3 border-b px-4 py-3">
+      <div className="border-bordure flex items-center gap-2.5 border-b px-3 py-3 sm:gap-3 sm:px-4">
         <div aria-hidden="true" className="flex shrink-0 gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
@@ -156,10 +159,10 @@ export function DemoExercice() {
       </div>
 
       {/* ------------------------------------------------------------- Code */}
-      <div className="relative flex px-4 py-4 font-mono text-[0.72rem] leading-[1.75] sm:text-[0.8rem]">
+      <div className="relative flex px-3 py-4 font-mono text-[0.65rem] leading-[1.75] sm:px-4 sm:text-[0.8rem]">
         <div
           aria-hidden="true"
-          className="text-discret/50 mr-4 shrink-0 space-y-0 text-right tabular-nums select-none"
+          className="text-discret/50 mr-3 shrink-0 space-y-0 text-right tabular-nums select-none sm:mr-4"
         >
           {lignes.map((_, index) => (
             <div key={index}>{index + 1}</div>
@@ -187,7 +190,7 @@ export function DemoExercice() {
       </div>
 
       {/* -------------------------------------------------------- Explication */}
-      <div className="border-bordure border-t px-4 pt-3 pb-4">
+      <div className="border-bordure border-t px-3 pt-3 pb-4 sm:px-4">
         <p className="text-discret mb-2 font-mono text-[0.65rem] tracking-[0.14em] uppercase">
           Votre explication
         </p>
@@ -239,8 +242,8 @@ export function DemoExercice() {
         }`}
       >
         <div className="overflow-hidden">
-          <div className="border-bordure bg-panneau-clair/60 border-t px-4 py-4">
-            <div className="flex items-start gap-4">
+          <div className="border-bordure bg-panneau-clair/60 border-t px-3 py-4 sm:px-4">
+            <div className="flex items-start gap-3 sm:gap-4">
               <Anneau note={NOTE} actif={acteVu === "verdict"} />
               <div className="min-w-0 flex-1">
                 <p className="text-encre text-sm font-medium">{RESUME}</p>
@@ -272,7 +275,7 @@ export function DemoExercice() {
       </div>
 
       {/* --------------------------------------------------- Rail des actes */}
-      <div className="border-bordure bg-fond/40 flex items-center gap-4 border-t px-4 py-2.5">
+      <div className="border-bordure bg-fond/40 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-3 py-2.5 sm:gap-x-4 sm:px-4">
         {ACTES.map((etape, index) => (
           <div key={etape.cle} className="flex items-center gap-2">
             <span

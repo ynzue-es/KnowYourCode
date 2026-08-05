@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 
 import { Ambiance } from "@/components/Ambiance";
+import { URL_DEPOT } from "@/lib/release";
+import { ADRESSE, AUTEUR, DESCRIPTION, NOM, TITRE } from "@/lib/site";
 
 import "./globals.css";
 
@@ -19,39 +21,36 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
-const TITRE = "KnowYourCode — connaître son code plutôt que son client";
-const DESCRIPTION =
-  "Un utilitaire de barre de menus pour macOS. Il tire au hasard une fonction du projet en cours et vous demande de l'expliquer. Un modèle tiers compare votre explication au code et vous dit ce que vous avez oublié.";
-
-/** L'adresse publique du site, réglable au déploiement. */
-const ADRESSE =
-  process.env.NEXT_PUBLIC_ADRESSE_SITE ?? "https://knowyourcode.vercel.app";
-
 export const metadata: Metadata = {
   metadataBase: new URL(ADRESSE),
   title: {
     default: TITRE,
-    template: "%s — KnowYourCode",
+    template: `%s — ${NOM}`,
   },
   description: DESCRIPTION,
-  applicationName: "KnowYourCode",
-  authors: [{ name: "Yannis Nzue Essono" }],
-  creator: "Yannis Nzue Essono",
+  applicationName: NOM,
+  authors: [{ name: AUTEUR, url: URL_DEPOT }],
+  creator: AUTEUR,
+  publisher: AUTEUR,
+  category: "technology",
   keywords: [
     "KnowYourCode",
     "macOS",
     "barre de menus",
     "relecture de code",
+    "revue de code",
     "Claude Code",
+    "Mistral",
     "Python",
     "TypeScript",
+    "outil pour développeurs",
   ],
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "fr_FR",
     url: "/",
-    siteName: "KnowYourCode",
+    siteName: NOM,
     title: TITRE,
     description: DESCRIPTION,
   },
@@ -60,7 +59,22 @@ export const metadata: Metadata = {
     title: TITRE,
     description: DESCRIPTION,
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      // Sans ces trois lignes, Google tronque l'aperçu de lui-même. Le site
+      // tient en une page : autant qu'elle soit résumée en entier.
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
+  // Le numéro de téléphone du pied de page n'existe pas : sans cela, Safari
+  // transforme les numéros de version en liens d'appel.
+  formatDetection: { telephone: false, address: false, email: false },
 };
 
 export const viewport: Viewport = {

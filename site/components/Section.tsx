@@ -29,7 +29,7 @@ export function Section({
     <section
       id={id}
       aria-labelledby={`${id}-titre`}
-      className="border-bordure/60 relative border-t px-6 py-24 sm:py-32"
+      className="border-bordure/60 relative border-t px-5 py-20 sm:px-6 sm:py-32"
     >
       {/* Le trait du haut n'est pas uniforme : il s'éteint vers les bords, ce
           qui évite la rayure d'un bout à l'autre de l'écran. */}

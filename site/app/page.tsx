@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BlocCode, Commande } from "@/components/BlocCode";
 import { Carte } from "@/components/Carte";
 import { DemoExercice } from "@/components/DemoExercice";
+import { DonneesStructurees } from "@/components/DonneesStructurees";
 import { Entete } from "@/components/Entete";
 import { LigneSpinner } from "@/components/LigneSpinner";
 import { Logo } from "@/components/Logo";
@@ -37,11 +38,13 @@ export default async function Accueil() {
 
   return (
     <>
+      <DonneesStructurees publication={publication} />
+
       <Entete lienTelechargement={LIEN_TELECHARGEMENT} />
 
       <main id="haut" className="flex-1">
         {/* --------------------------------------------------------- Hero */}
-        <div className="px-6 pt-16 pb-24 sm:pt-24 sm:pb-32">
+        <div className="px-5 pt-14 pb-20 sm:px-6 sm:pt-24 sm:pb-32">
           <div className="mx-auto grid w-full max-w-5xl items-center gap-14 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-12">
             <Revelation>
               <span className="border-bordure-vive bg-panneau/60 text-attenue inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-xs backdrop-blur">
@@ -52,7 +55,7 @@ export default async function Accueil() {
                 Barre de menus · macOS
               </span>
 
-              <h1 className="text-encre mt-6 text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
+              <h1 className="text-encre mt-6 text-[2rem] leading-[1.15] font-semibold tracking-tight text-balance sm:text-6xl sm:leading-tight">
                 Connaître son code
                 <span className="text-attenue block">
                   plutôt que son client.
@@ -139,7 +142,7 @@ export default async function Accueil() {
             </>
           }
         >
-          <figure className="border-bordure bg-panneau/60 relative overflow-hidden rounded-2xl border p-8 backdrop-blur-sm sm:p-10">
+          <figure className="border-bordure bg-panneau/60 relative overflow-hidden rounded-2xl border p-6 backdrop-blur-sm sm:p-10">
             <div
               aria-hidden="true"
               className="bg-accent/40 absolute inset-y-8 left-0 w-px"
@@ -400,10 +403,10 @@ export default async function Accueil() {
         {/* --------------------------------------------------- Fin de page */}
         <section
           aria-labelledby="fin-titre"
-          className="border-bordure/60 border-t px-6 py-24 sm:py-28"
+          className="border-bordure/60 border-t px-5 py-20 sm:px-6 sm:py-28"
         >
           <Revelation className="mx-auto w-full max-w-5xl">
-            <div className="border-bordure-vive bg-panneau/70 relative flex flex-col items-start gap-6 overflow-hidden rounded-3xl border p-8 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:p-12">
+            <div className="border-bordure-vive bg-panneau/70 relative flex flex-col items-start gap-6 overflow-hidden rounded-3xl border p-6 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:p-12">
               <div
                 aria-hidden="true"
                 className="halo bg-accent absolute -top-24 -left-16 h-56 w-56 rounded-full opacity-20"
@@ -431,7 +434,7 @@ export default async function Accueil() {
         </section>
       </main>
 
-      <footer className="border-bordure/60 border-t px-6 py-12">
+      <footer className="border-bordure/60 border-t px-5 py-12 sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Logo taille={28} className="rounded-[8px]" />

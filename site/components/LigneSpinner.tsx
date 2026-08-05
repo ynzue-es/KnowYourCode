@@ -85,7 +85,7 @@ export function LigneSpinner() {
           </span>
           <span
             aria-hidden="true"
-            className={`text-encre transition-opacity duration-200 ${
+            className={`text-encre min-w-0 transition-opacity duration-200 ${
               enTransition ? "opacity-0" : "opacity-100"
             }`}
           >
