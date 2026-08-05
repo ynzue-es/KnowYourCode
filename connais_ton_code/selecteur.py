@@ -42,6 +42,22 @@ RETENUS_ASSEZ = 24
 APPOINT_RICHESSE = 5
 REPERES_EN_APPOINT = 3
 
+def _autre_copie(dossier: Path) -> bool:
+    """Dit si ce dossier est une autre copie du dépôt plutôt qu'un sous-dossier.
+
+    Un worktree git — ceux que Claude Code range sous `.claude/worktrees/`,
+    ceux qu'on crée à la main — contient le projet entier, souvent sur une
+    autre branche et parfois à moitié fini. Le parcourir ferait poser des
+    questions sur du code qui n'est pas celui sur lequel on travaille, et
+    reposer la même fonction autant de fois qu'il y a de copies.
+
+    Le signe est le même dans tous les cas : un `.git` à la racine du dossier.
+    C'est un fichier dans un worktree, un dossier dans un clone imbriqué ; les
+    deux disent « ici commence un autre dépôt », et les deux s'arrêtent ici.
+    """
+    return (dossier / ".git").exists()
+
+
 DOSSIERS_IGNORES = frozenset(
     {
         ".git",
@@ -201,7 +217,9 @@ class SelecteurProjet:
                 if entree.name.startswith(".") and entree.name not in {".claude"}:
                     continue
                 if entree.is_dir():
-                    if entree.name not in DOSSIERS_IGNORES:
+                    if entree.name not in DOSSIERS_IGNORES and not _autre_copie(
+                        entree
+                    ):
                         a_parcourir.append(entree)
                 elif entree.suffix in LANGAGES:
                     trouves.append(entree)

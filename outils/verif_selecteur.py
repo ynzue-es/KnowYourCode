@@ -287,8 +287,58 @@ def verifier_le_temps() -> None:
     )
 
 
+def verifier_les_copies() -> None:
+    """Un worktree ou un dépôt imbriqué ne doit pas fournir de questions.
+
+    Sans ce filtre, une machine où Claude Code a laissé des worktrees sous
+    `.claude/worktrees/` fait poser des questions sur une autre branche que
+    celle où l'on travaille, et repose la même fonction autant de fois qu'il
+    y a de copies. Mesuré sur ce dépôt : 1540 extraits au lieu de 301.
+    """
+    with tempfile.TemporaryDirectory() as brut:
+        racine = Path(brut)
+        (racine / "vrai.py").write_text(
+            "def vraie(a, b):\n"
+            "    seuil = a or b or 'defaut'\n"
+            "    if not seuil:\n"
+            "        return None\n"
+            "    return seuil\n",
+            encoding="utf-8",
+        )
+
+        copie = racine / ".claude" / "worktrees" / "copie"
+        copie.mkdir(parents=True)
+        # Le `.git` d'un worktree est un fichier, celui d'un clone un dossier.
+        (copie / ".git").write_text("gitdir: ailleurs\n", encoding="utf-8")
+        (copie / "faux.py").write_text(
+            "def fausse(a, b):\n"
+            "    seuil = a or b or 'defaut'\n"
+            "    if not seuil:\n"
+            "        return None\n"
+            "    return seuil\n",
+            encoding="utf-8",
+        )
+
+        imbrique = racine / "dependance"
+        (imbrique / ".git").mkdir(parents=True)
+        (imbrique / "tiers.py").write_text(
+            "def tierce(a, b):\n"
+            "    seuil = a or b or 'defaut'\n"
+            "    if not seuil:\n"
+            "        return None\n"
+            "    return seuil\n",
+            encoding="utf-8",
+        )
+
+        noms = {e.nom_fonction for e in SelecteurProjet()._recenser(racine)}
+        _verifier("vraie" in noms, "le code du projet lui-même est bien recensé")
+        _verifier("fausse" not in noms, "un worktree n'est pas parcouru")
+        _verifier("tierce" not in noms, "un dépôt imbriqué n'est pas parcouru non plus")
+
+
 def main() -> int:
     verifier_le_bareme()
+    verifier_les_copies()
     verifier_le_corpus_de_reference()
     verifier_les_refus()
     verifier_la_ponderation()
