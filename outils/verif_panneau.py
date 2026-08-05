@@ -32,7 +32,8 @@ if str(RACINE) not in sys.path:
 DOSSIER_TEST = tempfile.mkdtemp(prefix="knowyourcode-verif-panneau-")
 os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 
-from PyQt6.QtCore import Qt, QTimer  # noqa: E402
+from PyQt6.QtCore import QRect, Qt, QTimer  # noqa: E402
+from PyQt6.QtGui import QGuiApplication  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
@@ -53,7 +54,12 @@ from connais_ton_code.fenetre_principale import FenetrePrincipale  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import Extrait  # noqa: E402
 from connais_ton_code.orchestrateur import Orchestrateur  # noqa: E402
-from connais_ton_code.panneau import Panneau  # noqa: E402
+from connais_ton_code.panneau import (  # noqa: E402
+    HAUTEUR_CORRECTION,
+    HAUTEUR_MANCHE,
+    LARGEUR,
+    Panneau,
+)
 from connais_ton_code.projet import ProjetFactice  # noqa: E402
 from connais_ton_code.selecteur import SelecteurFactice  # noqa: E402
 
@@ -438,6 +444,50 @@ def main() -> int:
         _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
         _verifier(not panneau.isVisible(), "le panneau a bien disparu")
 
+    def placement() -> None:
+        """Le panneau doit rester entier à l'écran, où que soit l'icône.
+
+        L'icône vit dans la barre de menus, donc n'importe où sur la largeur ;
+        et la fenêtre grandit en passant à la correction. Les deux ensemble la
+        faisaient sortir par la droite ou par le bas.
+        """
+        ecran = QGuiApplication.primaryScreen()
+        zone = ecran.availableGeometry()
+
+        for description, gauche in (
+            ("collée au bord gauche", zone.left()),
+            ("au milieu", zone.center().x()),
+            ("collée au bord droit", zone.right() - 24),
+        ):
+            panneau.ancrer(QRect(gauche, zone.top(), 24, 22))
+            for hauteur, moment in (
+                (HAUTEUR_MANCHE, "sur la carte"),
+                (HAUTEUR_CORRECTION, "sur la correction"),
+            ):
+                panneau.resize(LARGEUR, hauteur)
+                panneau._positionner()
+                cadre = panneau.geometry()
+                _verifier(
+                    zone.contains(cadre),
+                    f"icône {description}, {moment} : la fenêtre tient dans l'écran",
+                )
+
+        # L'écran de la machine qui fait tourner ce script est ce qu'il est :
+        # on ne peut pas en changer, et le rétrécissement resterait sinon
+        # jamais éprouvé. On lui substitue donc une place mesurée à la main.
+        vrai_zone_ecran = panneau._zone_ecran
+        for largeur_ecran, hauteur_ecran in ((1280, 600), (900, 500)):
+            etroit = QRect(0, 0, largeur_ecran, hauteur_ecran)
+            panneau._zone_ecran = lambda zone=etroit: zone
+            panneau.resize(LARGEUR, HAUTEUR_CORRECTION)
+            panneau._positionner()
+            _verifier(
+                etroit.contains(panneau.geometry()),
+                f"sur un écran de {largeur_ecran}×{hauteur_ecran}, "
+                "la fenêtre se rétrécit au lieu de déborder",
+            )
+        panneau._zone_ecran = vrai_zone_ecran
+
     def _reveiller() -> None:
         """Fait comme si un prompt venait de partir vers Claude Code."""
         orchestrateur._guetteur_prompts = GuetteurFige()
@@ -523,6 +573,7 @@ def main() -> int:
     etapes += [
         transitions_interdites,
         fermeture,
+        placement,
         desaccord,
         desaccord_suite,
         repos_reveille,

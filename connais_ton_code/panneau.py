@@ -72,6 +72,11 @@ HAUTEUR_BILAN = 210
 
 MARGE_ECRAN = 8
 
+# Le plancher au-delà duquel on cesse de rétrécir pour tenir dans un petit
+# écran : en dessous, les blocs à hauteur fixe se recouvrent et la carte
+# devient illisible. Mieux vaut alors déborder un peu que ne rien montrer.
+HAUTEUR_MINIMALE = 400
+
 # Le panneau se décolle de la barre de menus comme le font les menus du
 # système, sans plus.
 ECART_SOUS_LA_BARRE = 6
@@ -610,6 +615,10 @@ class Panneau(QWidget):
         # la barre de menus, il grandit vers le bas et pas une ligne de code ne
         # bouge — or c'est précisément l'instant où on la relit.
         self.resize(LARGEUR, HAUTEUR_CORRECTION)
+        # Mais grandir sans se replacer faisait passer le bas sous le bord de
+        # l'écran. Le placement remesure et remonte s'il le faut : le code qui
+        # bouge d'un cran vaut mieux qu'un bouton qu'on ne peut plus atteindre.
+        self._positionner()
         self._bouton_suivant.setFocus()
 
     def afficher_bilan(self, justes: int, total: int, commentaire: str) -> None:
@@ -644,27 +653,60 @@ class Panneau(QWidget):
         self.raise_()
         self.activateWindow()
 
+    def _zone_ecran(self) -> QRect:
+        """La place disponible sur l'écran qui porte l'icône.
+
+        Celui de l'icône, et non l'écran principal : avec un moniteur externe,
+        la barre de menus n'est pas forcément sur celui que le système appelle
+        principal. S'y fier plaçait le panneau d'après un écran et l'ancrait
+        sur un autre, c'est-à-dire nulle part.
+        """
+        ecran = None
+        if not self._zone_ancrage.isEmpty():
+            ecran = QGuiApplication.screenAt(self._zone_ancrage.center())
+        if ecran is None:
+            ecran = QGuiApplication.primaryScreen()
+        return ecran.availableGeometry() if ecran else QRect(0, 0, 1280, 800)
+
     def _positionner(self) -> None:
-        """Centre le panneau sous l'icône, sans déborder de l'écran."""
-        ecran = QGuiApplication.primaryScreen()
-        zone = ecran.availableGeometry() if ecran else QRect(0, 0, 1280, 800)
+        """Centre le panneau sous l'icône, en le gardant entier à l'écran.
+
+        Le placement borne aussi la taille, et pas seulement la position : une
+        fenêtre plus haute que l'écran laisserait dehors le bouton qui fait
+        avancer, et la série s'arrêterait là sans qu'on puisse rien y faire.
+        Sur un écran assez grand, rien de tout cela ne joue et la fenêtre garde
+        la taille qu'on lui a demandée.
+        """
+        zone = self._zone_ecran()
+
+        hauteur = min(
+            self.height(), zone.height() - ECART_SOUS_LA_BARRE - MARGE_ECRAN
+        )
+        largeur = min(self.width(), zone.width() - 2 * MARGE_ECRAN)
+        hauteur = max(hauteur, HAUTEUR_MINIMALE)
+        if (largeur, hauteur) != (self.width(), self.height()):
+            self.resize(largeur, hauteur)
 
         if self._zone_ancrage.isEmpty():
             # Position de repli : le coin où vit l'icône, faute de savoir où
             # elle est exactement.
-            self.move(
-                zone.right() - self.width() - MARGE_ECRAN,
-                zone.top() + ECART_SOUS_LA_BARRE,
-            )
-            return
+            x = zone.right() - self.width() - MARGE_ECRAN
+        else:
+            x = self._zone_ancrage.center().x() - self.width() // 2
 
-        x = self._zone_ancrage.center().x() - self.width() // 2
         x = max(
             zone.left() + MARGE_ECRAN,
             min(x, zone.right() - self.width() - MARGE_ECRAN),
         )
         # `availableGeometry` commence déjà sous la barre de menus.
-        self.move(x, zone.top() + ECART_SOUS_LA_BARRE)
+        y = max(
+            zone.top(),
+            min(
+                zone.top() + ECART_SOUS_LA_BARRE,
+                zone.bottom() - self.height() - MARGE_ECRAN,
+            ),
+        )
+        self.move(x, y)
 
     # ------------------------------------------------------------------
     # Interactions
