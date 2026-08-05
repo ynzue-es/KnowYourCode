@@ -3,34 +3,58 @@
 Toute la logique du cycle est ici. Le panneau signale des intentions, les
 briques rendent des données, et c'est l'orchestrateur qui décide de l'état
 suivant. Ce découpage est ce qui permet de remplacer le repérage du
-projet, le sélecteur ou l'évaluateur sans rouvrir l'interface.
+projet, le sélecteur ou le générateur de cartes sans rouvrir l'interface.
 """
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QObject, QThreadPool
+from typing import TYPE_CHECKING
+
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from .barre_menu import BarreMenu
+from .cartes import Carte, Correction, Serie, corriger
 from .etats import Etat, transition_valide
-from .evaluateur import Evaluateur
 from .historique import Historique
 from . import rappel
 from .fenetre_principale import FenetrePrincipale
-from .modeles import Evaluation, Extrait
+from .modeles import Extrait
 from .panneau import Panneau
 from .projet import Projet
 from .selecteur import Selecteur
 from .statistiques import calculer_statistiques
-from .taches import TacheEvaluation
 
-MESSAGE_REPOS = "Rien en attente. Une question quand vous voulez."
+if TYPE_CHECKING:  # pragma: no cover - le générateur n'est qu'un contrat ici
+    from .generateur import Generateur
+
+MESSAGE_REPOS = "Rien en attente. Une série quand vous voulez."
 MESSAGE_SANS_EXTRAIT = (
-    "Aucune fonction à faire expliquer n'a été trouvée dans le projet."
+    "Aucune fonction à faire lire n'a été trouvée dans le projet."
 )
+MESSAGE_SANS_SERIE = (
+    "Rien à demander sur ce bout de code. Réessayez dans un instant."
+)
+MESSAGE_ABANDON = "Série laissée de côté. Une autre quand vous voulez."
+
+
+def _commentaire_de_bilan(justes: int, total: int) -> str:
+    """La phrase qui accompagne le compte, sans note ni félicitations creuses."""
+    if total and justes == total:
+        return "Ce code-là, vous le connaissez."
+    if justes * 2 >= total:
+        return "Les explications valent d'être relues."
+    return "C'est justement le genre de code qui mérite qu'on y revienne."
 
 
 class Orchestrateur(QObject):
-    """Fait tourner le cycle Fermé → Question → Évaluation → Retour."""
+    """Fait tourner le cycle Fermé → Carte → Correction → Bilan."""
+
+    carte_repondue = pyqtSignal(object, object, str, object)
+    """Extrait, carte, réponse donnée, correction : de quoi tenir un journal.
+
+    L'orchestrateur confie déjà la réponse à l'historique ; ce signal existe
+    pour qui voudrait la suivre sans passer par le disque.
+    """
 
     def __init__(
         self,
@@ -39,7 +63,7 @@ class Orchestrateur(QObject):
         barre: BarreMenu,
         projet: Projet,
         selecteur: Selecteur,
-        evaluateur: Evaluateur,
+        generateur: "Generateur",
         historique: Historique,
         parent: QObject | None = None,
     ) -> None:
@@ -49,16 +73,14 @@ class Orchestrateur(QObject):
         self._barre = barre
         self._projet = projet
         self._selecteur = selecteur
-        self._evaluateur = evaluateur
+        self._generateur = generateur
         self._historique = historique
 
         self._etat = Etat.FERME
         self._extrait_courant: Extrait | None = None
-
-        # Une évaluation lancée puis abandonnée finit quand même par rendre
-        # son résultat : le jeton permet de reconnaître un retour devenu sans
-        # objet au lieu de rouvrir le panneau par surprise.
-        self._jeton_evaluation = 0
+        self._serie: Serie | None = None
+        self._index = 0
+        self._justes = 0
 
         self._brancher()
 
@@ -70,7 +92,7 @@ class Orchestrateur(QObject):
         return self._etat
 
     def _brancher(self) -> None:
-        self._panneau.reponse_soumise.connect(self._sur_reponse)
+        self._panneau.reponse_donnee.connect(self._sur_reponse)
         self._panneau.passage_demande.connect(self._sur_passage)
         self._panneau.suite_demandee.connect(self._sur_suite)
         self._panneau.question_demandee.connect(self.poser_question)
@@ -101,7 +123,7 @@ class Orchestrateur(QObject):
             self._fenetre.definir_rappel(rappel.est_installe())
 
     def ouvrir(self) -> None:
-        """Le panneau s'ouvre : sur la question qui attendait, ou au repos."""
+        """Le panneau s'ouvre : sur la série qui attendait, ou au repos."""
         self._panneau.ancrer(self._barre.zone())
 
         if self._etat is not Etat.FERME:
@@ -112,16 +134,22 @@ class Orchestrateur(QObject):
             self._panneau.activateWindow()
             return
 
-        self._afficher_repos()
+        self._afficher_repos(MESSAGE_REPOS)
 
-    def _afficher_repos(self) -> None:
-        self._panneau.afficher_repos(MESSAGE_REPOS)
+    def _afficher_repos(self, message: str) -> None:
+        self._oublier_serie()
+        self._panneau.afficher_repos(message)
         if self._etat is not Etat.REPOS:
             self._aller_vers(Etat.REPOS)
 
     def poser_question(self) -> None:
-        """Choisit un extrait et l'affiche."""
-        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.RETOUR):
+        """Choisit un extrait, fait fabriquer sa série, et pose la première carte.
+
+        Toute la série est fabriquée ici, avant la première carte : c'est ce
+        qui permet aux corrections suivantes d'être instantanées, et donc à
+        l'exercice de ne jamais faire attendre entre deux cartes.
+        """
+        if self._etat not in (Etat.FERME, Etat.REPOS, Etat.BILAN):
             return
 
         self._panneau.ancrer(self._barre.zone())
@@ -129,74 +157,118 @@ class Orchestrateur(QObject):
             self._historique.identifiants_deja_vus(), self._projet.projet_actif()
         )
         if extrait is None:
-            self._panneau.afficher_repos(MESSAGE_SANS_EXTRAIT)
-            if self._etat is not Etat.REPOS:
-                self._aller_vers(Etat.REPOS)
+            self._afficher_repos(MESSAGE_SANS_EXTRAIT)
+            return
+
+        serie = self._generateur.fabriquer(extrait)
+        if serie is None or not serie.cartes:
+            self._afficher_repos(MESSAGE_SANS_SERIE)
             return
 
         self._extrait_courant = extrait
-        self._panneau.afficher_question(extrait)
-        self._aller_vers(Etat.QUESTION)
+        self._serie = serie
+        self._index = 0
+        self._justes = 0
+        self._poser_carte()
 
     def afficher_fenetre(self) -> None:
         """Ouvre la grande fenêtre, sans toucher au cycle de l'exercice.
 
         La progression et les réglages ne sont pas un état du panneau : on
-        peut les consulter pendant qu'une question attend une réponse, sans
-        rien lui faire perdre.
+        peut les consulter pendant qu'une carte attend une réponse, sans rien
+        lui faire perdre.
         """
         self._fenetre.definir_rappel(rappel.est_installe())
         self._fenetre.afficher(calculer_statistiques(self._historique.entrees()))
 
-    def _sur_reponse(self, reponse: str) -> None:
-        if self._etat is not Etat.QUESTION or self._extrait_courant is None:
+    # ------------------------------------------------------------------
+    # La série
+    # ------------------------------------------------------------------
+
+    def _poser_carte(self) -> None:
+        if self._serie is None or self._extrait_courant is None:
             return
-
-        self._aller_vers(Etat.EVALUATION)
-        self._panneau.afficher_attente()
-
-        self._jeton_evaluation += 1
-        jeton = self._jeton_evaluation
-
-        tache = TacheEvaluation(self._evaluateur, self._extrait_courant, reponse)
-        tache.signaux.terminee.connect(
-            lambda evaluation: self._sur_evaluation(jeton, reponse, evaluation)
+        self._panneau.afficher_carte(
+            self._extrait_courant,
+            self._serie.cartes[self._index],
+            self._index + 1,
+            len(self._serie.cartes),
         )
-        QThreadPool.globalInstance().start(tache)
+        if self._etat is not Etat.QUESTION:
+            self._aller_vers(Etat.QUESTION)
 
-    def _sur_evaluation(
-        self, jeton: int, reponse: str, evaluation: Evaluation
-    ) -> None:
-        if jeton != self._jeton_evaluation or self._etat is not Etat.EVALUATION:
+    def _sur_reponse(self, reponse: str) -> None:
+        """Corrige sur place : rien ne part sur le réseau, rien n'attend."""
+        if self._etat is not Etat.QUESTION or self._serie is None:
             return
+
+        carte = self._serie.cartes[self._index]
+        correction = corriger(carte, reponse)
+        if correction.juste:
+            self._justes += 1
+
+        self._enregistrer(carte, reponse, correction)
+        self._panneau.afficher_correction(
+            correction, self._index + 1, len(self._serie.cartes)
+        )
+        self._aller_vers(Etat.RETOUR)
+
+    def _enregistrer(
+        self, carte: Carte, reponse: str, correction: Correction
+    ) -> None:
+        """Confie la réponse à l'historique, et la fait connaître au-dehors.
+
+        L'historique est réécrit en même temps que cet exercice : tant que sa
+        méthode pour les cartes n'est pas en place, la série doit continuer
+        plutôt que de tomber au milieu. Le signal, lui, part dans tous les cas.
+        """
         if self._extrait_courant is None:
             return
+        self.carte_repondue.emit(self._extrait_courant, carte, reponse, correction)
 
-        self._historique.enregistrer_reponse(
-            self._extrait_courant, reponse, evaluation
+        enregistrer = getattr(self._historique, "enregistrer_carte", None)
+        if enregistrer is not None:
+            enregistrer(self._extrait_courant, carte, reponse, correction)
+
+    def _sur_suite(self) -> None:
+        """La carte suivante, ou le bilan s'il n'en reste plus."""
+        if self._etat is not Etat.RETOUR or self._serie is None:
+            return
+
+        self._index += 1
+        if self._index < len(self._serie.cartes):
+            self._poser_carte()
+            return
+
+        total = len(self._serie.cartes)
+        justes = self._justes
+        self._oublier_serie()
+        self._panneau.afficher_bilan(
+            justes, total, _commentaire_de_bilan(justes, total)
         )
-        self._panneau.afficher_retour(evaluation)
-        self._aller_vers(Etat.RETOUR)
+        self._aller_vers(Etat.BILAN)
 
     def _sur_passage(self) -> None:
         if self._etat is not Etat.QUESTION or self._extrait_courant is None:
             return
         self._historique.enregistrer_passage(self._extrait_courant)
-        self._extrait_courant = None
-        self._afficher_repos()
+        self._afficher_repos(MESSAGE_ABANDON)
 
-    def _sur_suite(self) -> None:
-        if self._etat is not Etat.RETOUR:
-            return
+    def _oublier_serie(self) -> None:
         self._extrait_courant = None
-        self._afficher_repos()
+        self._serie = None
+        self._index = 0
+        self._justes = 0
+
+    # ------------------------------------------------------------------
+    # Fermeture
+    # ------------------------------------------------------------------
 
     def fermer(self) -> None:
-        """Referme le panneau sans rien enregistrer."""
+        """Referme le panneau sans rien enregistrer de plus."""
         if self._etat is Etat.FERME:
             return
-        self._jeton_evaluation += 1
-        self._extrait_courant = None
+        self._oublier_serie()
         self._aller_vers(Etat.FERME)
         self._panneau.fermer()
 
@@ -204,6 +276,5 @@ class Orchestrateur(QObject):
         """Le panneau a disparu de lui-même, macOS l'ayant mis en retrait."""
         if self._etat is Etat.FERME:
             return
-        self._jeton_evaluation += 1
-        self._extrait_courant = None
+        self._oublier_serie()
         self._aller_vers(Etat.FERME)
