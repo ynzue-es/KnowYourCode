@@ -180,8 +180,8 @@ class FenetrePrincipale(QWidget):
         colonne.addWidget(self._interrupteur_reveil)
 
         note_reveil = CaptionLabel(
-            "Pose un hook dans ~/.claude/settings.json, qui vaut pour toutes "
-            "vos sessions. Redémarrez Claude Code après l'avoir changé.",
+            "Lit le journal de session que Claude Code tient dans "
+            "~/.claude/projects. Rien n'est installé, rien à redémarrer.",
             page,
         )
         note_reveil.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")

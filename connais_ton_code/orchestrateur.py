@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pathlib import Path
-
 from PyQt6.QtCore import QObject, QThreadPool, QTimer, pyqtSignal
 
 from .barre_menu import BarreMenu
@@ -44,14 +42,6 @@ MESSAGE_PREPARATION = "Je prépare les questions…"
 # précédents ont échoué.
 ECHECS_AVANT_DE_SE_TAIRE = 3
 MESSAGE_ABANDON = "Série laissée de côté. Une autre quand vous voulez."
-
-
-def _date_de_fichier(chemin: Path) -> float:
-    """La date de dernière écriture, ou zéro si le fichier n'est pas là."""
-    try:
-        return chemin.stat().st_mtime
-    except OSError:
-        return 0.0
 
 
 def _commentaire_de_bilan(justes: int, total: int) -> str:
@@ -146,32 +136,31 @@ class Orchestrateur(QObject):
     # ------------------------------------------------------------------
 
     def _guetter_le_reveil(self) -> None:
-        """Surveille le fichier que le hook de Claude Code vient toucher.
+        """Surveille le journal de session de Claude Code.
 
-        Un `stat` toutes les deux secondes plutôt qu'une surveillance du
-        système de fichiers : le fichier est créé, remplacé, parfois effacé
-        avec le dossier de données, et un observateur posé sur un chemin qui
-        n'existe pas encore ne se réarme pas tout seul.
+        Un relevé toutes les deux secondes plutôt qu'une surveillance du
+        système de fichiers : les journaux apparaissent et disparaissent au
+        gré des sessions, et un observateur posé sur un chemin qui n'existe
+        pas encore ne se réarme pas tout seul.
 
-        La date de départ est celle du fichier au lancement : sans elle, un
-        réveil vieux de trois jours ouvrirait une série au démarrage.
+        Deux secondes, c'est moins que le temps de reposer les mains sur le
+        clavier : l'ouverture paraît immédiate, et le relevé reste dans le
+        bruit.
         """
-        self._date_du_reveil = _date_de_fichier(reveil.chemin_reveil())
+        self._reveil_actif = reveil.est_actif()
+        self._guetteur_prompts = reveil.Guetteur()
         self._guetteur = QTimer(self)
         self._guetteur.setInterval(2000)
         self._guetteur.timeout.connect(self._sur_guet)
         self._guetteur.start()
 
     def _sur_guet(self) -> None:
-        date = _date_de_fichier(reveil.chemin_reveil())
-        if date <= self._date_du_reveil:
+        # On relève la position même quand le réglage est éteint : sinon
+        # l'allumer ferait remonter d'un coup tous les prompts d'avant.
+        parus = self._guetteur_prompts.prompts()
+        if not parus or not self._reveil_actif:
             return
-        self._date_du_reveil = date
 
-        # Le réglage peut être éteint : dans ce cas plus personne ne touche le
-        # fichier, et ce chemin n'est jamais emprunté. On ne relit donc pas
-        # les réglages ici, ce serait payer une lecture toutes les deux
-        # secondes pour une information qui ne sert qu'une fois.
         if self._etat is not Etat.FERME:
             return
         if calculer_statistiques(self._historique.entrees()).faite_aujourdhui:
@@ -182,11 +171,14 @@ class Orchestrateur(QObject):
         self.ouvrir()
         self.poser_question()
 
-    def _sur_reveil(self, installe: bool) -> None:
-        """Pose ou retire le hook dans les réglages de Claude Code."""
-        reussi = reveil.installer() if installe else reveil.retirer()
-        if not reussi:
-            self._fenetre.definir_reveil(reveil.est_installe())
+    def _sur_reveil(self, actif: bool) -> None:
+        """Retient le choix.
+
+        Rien n'est installé ni défait : le journal que l'on guette, Claude Code
+        l'écrit de toute façon. L'interrupteur ne fait qu'autoriser sa lecture.
+        """
+        self._reveil_actif = actif
+        reveil.definir_actif(actif)
 
     def _sur_rappel(self, installe: bool) -> None:
         """Pose ou retire le rappel dans les réglages de Claude Code.
@@ -337,7 +329,7 @@ class Orchestrateur(QObject):
         lui faire perdre.
         """
         self._fenetre.definir_rappel(rappel.est_installe())
-        self._fenetre.definir_reveil(reveil.est_installe())
+        self._fenetre.definir_reveil(reveil.est_actif())
         self._fenetre.afficher(calculer_statistiques(self._historique.entrees()))
 
     # ------------------------------------------------------------------
