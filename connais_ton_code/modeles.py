@@ -31,23 +31,43 @@ class Extrait:
 
 @dataclass(frozen=True)
 class Evaluation:
-    """Le retour rendu à l'utilisateur après sa réponse."""
+    """Le retour d'un modèle sur une explication tapée. Vestige.
+
+    Plus personne ne devrait en produire : une carte se corrige en local et
+    rend une `Correction`. La classe survit le temps que le panneau,
+    l'orchestrateur et l'évaluateur passent aux cartes à leur tour — la
+    supprimer aujourd'hui casserait leurs imports sans rien apporter.
+    """
 
     verdict: str
     """Une ou deux phrases de synthèse, affichées en premier."""
     score: int
-    """Note sur 100, utilisée plus tard pour mesurer la progression."""
+    """Note sur 100."""
     points_oublies: list[str] = field(default_factory=list)
     """Ce que la réponse n'a pas mentionné, un point par entrée."""
+
+
+# Les trois natures de ligne que l'historique peut contenir. `ANCIENNE` n'est
+# jamais écrite : c'est l'étiquette que la relecture pose sur une explication
+# notée de l'ancien exercice, qui n'a plus de carte à montrer mais reste la
+# preuve qu'on a travaillé ce jour-là.
+CARTE = "carte"
+PASSE = "passe"
+ANCIENNE = "ancienne"
 
 
 @dataclass(frozen=True)
 class EntreeHistorique:
     """Une ligne de l'historique, relue depuis le disque et validée.
 
-    Reflète ce qu'écrit `Historique._ajouter` : `score`, `verdict` et
-    `reponse` n'existent que pour les entrées répondues, jamais pour un
-    passage.
+    Une entrée est d'abord une carte répondue : sa forme, la notion qu'elle
+    enseignait, sa catégorie, la ligne visée, et juste ou faux. Le reste
+    identifie l'extrait d'où elle venait, ce qui permet de ne pas le
+    reproposer aussitôt.
+
+    `forme`, `categorie`, `notion`, `ligne` et `juste` ne veulent rien dire en
+    dehors d'`issue == CARTE` : un passage n'a pas de bonne réponse, et une
+    entrée de l'ancien exercice n'a pas de forme.
     """
 
     identifiant: str
@@ -56,8 +76,13 @@ class EntreeHistorique:
     langage: str
     date: datetime
     issue: str
-    """"repondu" ou "passe"."""
-    score: int | None = None
-    verdict: str | None = None
-    reponse: str | None = None
-    points_oublies: list[str] = field(default_factory=list)
+    """`CARTE`, `PASSE` ou `ANCIENNE`."""
+    forme: str = ""
+    """Nom du membre de `cartes.Forme` : "QCM", "REPERER"…"""
+    categorie: str = ""
+    """Une des catégories de `reperage` : langage, robustesse, sécurité."""
+    notion: str | None = None
+    """La notion enseignée, quand la ligne en portait une."""
+    ligne: int = 0
+    """Ligne visée dans l'extrait, numérotée à partir de 1."""
+    juste: bool = False
