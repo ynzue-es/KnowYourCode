@@ -55,8 +55,12 @@ from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import Extrait  # noqa: E402
 from connais_ton_code.orchestrateur import Orchestrateur  # noqa: E402
 from connais_ton_code.panneau import (  # noqa: E402
+    HAUTEUR_BILAN,
+    HAUTEUR_BOUTON_OPTION,
     HAUTEUR_CORRECTION,
     HAUTEUR_MANCHE,
+    HAUTEUR_MINIMALE,
+    HAUTEUR_REPOS,
     LARGEUR,
     Panneau,
 )
@@ -303,6 +307,23 @@ def main() -> int:
             f"{attendues} boutons",
         )
 
+        # Des propositions serrées se lisent comme une seule phrase coupée, et
+        # on hésite sur celle qu'on vise. Les rectangles doivent donc être à la
+        # fois assez hauts et bien séparés.
+        cadres = [bouton.geometry() for bouton in panneau._boutons_options]
+        _verifier(
+            all(cadre.height() >= HAUTEUR_BOUTON_OPTION for cadre in cadres),
+            f"carte {numero} ({marque}) : chaque proposition garde sa hauteur",
+        )
+        _verifier(
+            all(
+                not premier.intersects(second)
+                for i, premier in enumerate(cadres)
+                for second in cadres[i + 1 :]
+            ),
+            f"carte {numero} ({marque}) : deux propositions ne se touchent pas",
+        )
+
         if numero == 1 and juste:
             _verifier(
                 panneau.pos().y() < 60,
@@ -471,6 +492,49 @@ def main() -> int:
                     zone.contains(cadre),
                     f"icône {description}, {moment} : la fenêtre tient dans l'écran",
                 )
+
+        # Le placement ne doit jamais agrandir une fenêtre qu'on a voulue
+        # petite : le repos ne demande que 170 pixels, et les lui refuser
+        # ouvrait un panneau aux trois quarts vide.
+        # En passant par le vrai affichage : c'est lui qui masque le code et
+        # rétrécit la zone basse, donc lui seul qui autorise une petite
+        # fenêtre. La redimensionner à la main se heurterait au minimum que
+        # les blocs imposent, et le contrôle passerait pour de mauvaises
+        # raisons.
+        for afficher, hauteur, page in (
+            (
+                lambda: panneau.afficher_repos("Rien en attente."),
+                HAUTEUR_REPOS,
+                "au repos",
+            ),
+            (
+                lambda: panneau.afficher_bilan(1, 2, "Bien."),
+                HAUTEUR_BILAN,
+                "sur le bilan",
+            ),
+        ):
+            afficher()
+            # Redimensionner une fenêtre déjà à l'écran passe par le système :
+            # la mesurer sans laisser Qt appliquer la géométrie donnerait
+            # l'ancienne taille, et le constat ne dirait rien.
+            application.processEvents()
+            avant = panneau.height()
+            panneau._positionner()
+            application.processEvents()
+
+            # Qt impose ses propres minimums, et ceux-là ne regardent pas le
+            # placement. Ce qu'on lui demande est plus étroit et se vérifie
+            # exactement : ne jamais agrandir ce qu'on lui donne.
+            _verifier(
+                panneau.height() <= avant,
+                f"{page}, le placement n'agrandit pas la fenêtre "
+                f"({avant} → {panneau.height()})",
+            )
+            _verifier(
+                avant < HAUTEUR_MINIMALE,
+                f"{page}, la fenêtre reste petite ({avant} px) au lieu d'être "
+                f"gonflée au plancher de {HAUTEUR_MINIMALE}",
+            )
 
         # L'écran de la machine qui fait tourner ce script est ce qu'il est :
         # on ne peut pas en changer, et le rétrécissement resterait sinon

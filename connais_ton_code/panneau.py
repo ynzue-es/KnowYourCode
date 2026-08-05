@@ -85,8 +85,16 @@ ECART_SOUS_LA_BARRE = 6
 # le même extrait, et si la zone de code changeait de taille entre les deux, le
 # regard perdrait sa place au moment précis où il doit relire. Seuls Repos et
 # Bilan s'en écartent, puisqu'ils n'affichent pas de code du tout.
+# Les propositions se répondent à la souris et se lisent d'un regard : serrées,
+# on hésite sur celle qu'on vise, et deux libellés qui se touchent se lisent
+# comme une seule phrase coupée. Un bouton confortable fait 36 pixels ; deux
+# rangées et leur écart en demandent donc 80.
+HAUTEUR_BOUTON_OPTION = 36
+ECART_OPTIONS = 8
+HAUTEUR_ZONE_OPTIONS = 2 * HAUTEUR_BOUTON_OPTION + ECART_OPTIONS
+
 HAUTEUR_ZONE_REPOS = 70
-HAUTEUR_ZONE_CARTE = 148
+HAUTEUR_ZONE_CARTE = 160
 HAUTEUR_ZONE_CORRECTION = 214
 HAUTEUR_ZONE_BILAN = 104
 
@@ -430,10 +438,10 @@ class Panneau(QWidget):
     def _construire_reponses(self, parent: QWidget) -> QWidget:
         """La grille de propositions, seul geste de réponse qui subsiste."""
         self._zone_options = QWidget(parent)
-        self._zone_options.setFixedHeight(68)
+        self._zone_options.setFixedHeight(HAUTEUR_ZONE_OPTIONS)
         self._grille_options = QGridLayout(self._zone_options)
         self._grille_options.setContentsMargins(0, 0, 0, 0)
-        self._grille_options.setSpacing(6)
+        self._grille_options.setSpacing(ECART_OPTIONS)
         return self._zone_options
 
     def _construire_page_correction(self) -> QWidget:
@@ -679,11 +687,13 @@ class Panneau(QWidget):
         """
         zone = self._zone_ecran()
 
-        hauteur = min(
-            self.height(), zone.height() - ECART_SOUS_LA_BARRE - MARGE_ECRAN
-        )
+        # Le plancher ne sert qu'à limiter le rétrécissement, jamais à gonfler :
+        # le repos ne demande que 170 pixels, et les lui refuser ouvrait une
+        # fenêtre aux trois quarts vide. D'où le `min` avec la hauteur demandée,
+        # qui garde la dernière décision à l'appelant.
+        place = zone.height() - ECART_SOUS_LA_BARRE - MARGE_ECRAN
+        hauteur = min(self.height(), max(place, HAUTEUR_MINIMALE))
         largeur = min(self.width(), zone.width() - 2 * MARGE_ECRAN)
-        hauteur = max(hauteur, HAUTEUR_MINIMALE)
         if (largeur, hauteur) != (self.width(), self.height()):
             self.resize(largeur, hauteur)
 
@@ -728,7 +738,7 @@ class Panneau(QWidget):
         colonnes = min(len(options), _COLONNES_QCM) or 1
         for rang, texte in enumerate(options):
             bouton = PushButton(texte, self._zone_options)
-            bouton.setMinimumHeight(31)
+            bouton.setMinimumHeight(HAUTEUR_BOUTON_OPTION)
             bouton.clicked.connect(
                 lambda _=False, choix=texte: self._repondre(choix)
             )
