@@ -41,6 +41,7 @@ from connais_ton_code.extraction import fonctions  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import EntreeHistorique  # noqa: E402
 from connais_ton_code import rappel  # noqa: E402
+from connais_ton_code.reperage import notion_reconnue, reperer  # noqa: E402
 from connais_ton_code.statistiques import calculer_statistiques  # noqa: E402
 
 _constats: list[tuple[bool, str]] = []
@@ -119,6 +120,180 @@ def soustraire(a, b):
         [f.nom for f in trouvees] == ["additionner", "soustraire"],
         "les fonctions Python sont repérées dans l'ordre du fichier",
     )
+
+
+# Chaque cas donne le fragment attendu sur la ligne arrivée en tête, ou `None`
+# quand la bonne réponse est de ne rien signaler. Ce dernier point compte
+# autant que les autres : le repérage n'a d'intérêt que s'il se tait sur du
+# code ordinaire.
+_CAS_REPERAGE: tuple[tuple[str, str, str, str | None], ...] = (
+    (
+        "une valeur par défaut mutable est signalée",
+        "python",
+        "def ajouter(element, seau=[]):\n    seau.append(element)\n    return seau\n",
+        "seau=[]",
+    ),
+    (
+        "shell=True est signalé",
+        "python",
+        "def lancer(nom):\n"
+        "    import subprocess\n"
+        "    return subprocess.run(f'ls {nom}', shell=True)\n",
+        "shell=True",
+    ),
+    (
+        "une requête SQL assemblée à la main est signalée",
+        "python",
+        "def chercher(curseur, nom):\n"
+        '    curseur.execute(f"SELECT * FROM gens WHERE nom = \'{nom}\'")\n'
+        "    return curseur.fetchall()\n",
+        "SELECT",
+    ),
+    (
+        "un assert servant de garde est signalé",
+        "python",
+        "def payer(montant):\n    assert montant > 0\n    return montant * 2\n",
+        "assert",
+    ),
+    (
+        "le else d'une boucle est montré sur son mot-clé",
+        "python",
+        "def chercher(elements, cible):\n"
+        "    for element in elements:\n"
+        "        if element == cible:\n"
+        "            break\n"
+        "    else:\n"
+        "        return None\n"
+        "    return element\n",
+        "else:",
+    ),
+    (
+        "un commentaire ne déplace pas le finally",
+        "python",
+        "def lire(chemin):\n"
+        "    fichier = open(chemin)\n"
+        "    try:\n"
+        "        return fichier.read()\n"
+        "    finally:\n"
+        "        # on ferme quoi qu'il arrive\n"
+        "        fichier.close()\n",
+        "finally:",
+    ),
+    (
+        "la capture tardive dans une boucle est signalée",
+        "python",
+        "def fabriquer(nombres):\n"
+        "    sorties = []\n"
+        "    for nombre in nombres:\n"
+        "        sorties.append(lambda: nombre * 2)\n"
+        "    return sorties\n",
+        "lambda",
+    ),
+    (
+        "un except nu est signalé",
+        "python",
+        "def lire(chemin):\n"
+        "    try:\n"
+        "        return open(chemin).read()\n"
+        "    except:\n"
+        "        return ''\n",
+        "except:",
+    ),
+    (
+        "le or de repli est signalé, celui de condition non",
+        "python",
+        "def saluer(saisie, poli):\n"
+        "    if saisie or poli:\n"
+        "        pass\n"
+        "    nom = saisie or 'anonyme'\n"
+        "    return nom\n",
+        "'anonyme'",
+    ),
+    (
+        "un is not None ordinaire ne déclenche rien",
+        "python",
+        "def valeur(entree):\n"
+        "    if entree is not None:\n"
+        "        return entree\n"
+        "    return 0\n",
+        None,
+    ),
+    (
+        "une clé de liste prise sur la position est signalée",
+        "tsx",
+        "export function Liste({ elements }: Props) {\n"
+        "  return (\n"
+        "    <ul>\n"
+        "      {elements.map((e, index) => (\n"
+        "        <li key={index}>{e.libelle}</li>\n"
+        "      ))}\n"
+        "    </ul>\n"
+        "  );\n"
+        "}\n",
+        "key={index}",
+    ),
+    (
+        "le double égal est signalé, le triple non",
+        "typescript",
+        "export function memes(a: unknown, b: unknown) {\n"
+        "  const pareil = a == b;\n"
+        "  return pareil;\n"
+        "}\n",
+        "a == b",
+    ),
+    (
+        "un await pris dans une boucle est signalé",
+        "typescript",
+        "export async function toutCharger(ids: string[]) {\n"
+        "  const sortie = [];\n"
+        "  for (const id of ids) {\n"
+        "    sortie.push(await charger(id));\n"
+        "  }\n"
+        "  return sortie;\n"
+        "}\n",
+        "await charger",
+    ),
+    (
+        "dangerouslySetInnerHTML est signalé",
+        "tsx",
+        "export function Brut({ html }: Props) {\n"
+        "  return <div dangerouslySetInnerHTML={{ __html: html }} />;\n"
+        "}\n",
+        "dangerouslySetInnerHTML",
+    ),
+)
+
+
+def verifier_reperage() -> None:
+    """Contrôles sur le choix des lignes qui méritent une question.
+
+    C'est la brique dont dépendent toutes les cartes : une ligne mal désignée
+    devient une leçon fausse, et une leçon fausse est pire que pas de leçon.
+    """
+    for description, langage, code, attendu in _CAS_REPERAGE:
+        reperes = reperer(code, langage)
+        lignes = code.splitlines()
+        if attendu is None:
+            _verifier(not reperes, description)
+        else:
+            _verifier(
+                bool(reperes) and attendu in lignes[reperes[0].ligne - 1],
+                description,
+            )
+
+    for saisie, notion, attendu in (
+        ("Closures", "fermeture", True),
+        ("  CLÔTURE ", "fermeture", True),
+        ("décorateurs", "décorateur", True),
+        ("memoization", "mémoïsation", True),
+        ("boucle", "fermeture", False),
+        ("", "fermeture", False),
+    ):
+        _verifier(
+            notion_reconnue(saisie, notion) is attendu,
+            f"« {saisie.strip() or 'rien' } » {'vaut' if attendu else 'ne vaut pas'} "
+            f"« {notion} »",
+        )
 
 
 def _entree(
@@ -412,6 +587,7 @@ def verifier_lecture_historique() -> None:
 
 def main() -> int:
     verifier_extraction()
+    verifier_reperage()
     verifier_statistiques()
     verifier_lecture_historique()
     verifier_rappel()
