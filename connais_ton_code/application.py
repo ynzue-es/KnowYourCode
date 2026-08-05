@@ -118,10 +118,10 @@ def construire(application: QApplication, factice: bool = False) -> Orchestrateu
     return orchestrateur
 
 
-def attendre_les_evaluations(delai_ms: int = 3000) -> None:
-    """Laisse les évaluations en cours se terminer avant de démonter Qt.
+def attendre_les_fabrications(delai_ms: int = 3000) -> None:
+    """Laisse les fabrications en cours se terminer avant de démonter Qt.
 
-    Une évaluation abandonnée continue de tourner dans son fil : si Qt est
+    Une fabrication abandonnée continue de tourner dans son fil : si Qt est
     démonté avant qu'elle rende son résultat, elle l'émet sur des objets qui
     n'existent plus et la sortie du programme se termine par une trace
     d'erreur sans intérêt.
@@ -140,5 +140,5 @@ def lancer() -> int:
     construire(application)
 
     code = application.exec()
-    attendre_les_evaluations()
+    attendre_les_fabrications()
     return code

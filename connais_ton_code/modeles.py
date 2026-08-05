@@ -7,7 +7,7 @@ sans interface graphique.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 
@@ -27,24 +27,6 @@ class Extrait:
     langage: str
     """Nom de lexer Pygments : "python", "typescript" ou "tsx"."""
     code: str
-
-
-@dataclass(frozen=True)
-class Evaluation:
-    """Le retour d'un modèle sur une explication tapée. Vestige.
-
-    Plus personne ne devrait en produire : une carte se corrige en local et
-    rend une `Correction`. La classe survit le temps que le panneau,
-    l'orchestrateur et l'évaluateur passent aux cartes à leur tour — la
-    supprimer aujourd'hui casserait leurs imports sans rien apporter.
-    """
-
-    verdict: str
-    """Une ou deux phrases de synthèse, affichées en premier."""
-    score: int
-    """Note sur 100."""
-    points_oublies: list[str] = field(default_factory=list)
-    """Ce que la réponse n'a pas mentionné, un point par entrée."""
 
 
 # Les trois natures de ligne que l'historique peut contenir. `ANCIENNE` n'est

@@ -196,13 +196,21 @@ remplaçant les barres par des tirets et n'est donc pas réversible dès qu'un
 nom contient lui-même un tiret.
 
 **La sélection** (`selecteur.py`, `extraction.py`) parcourt ce projet et tire
-une fonction au hasard parmi celles de 4 à 60 lignes. Les fonctions Python
-sont repérées avec `ast`, les fonctions TypeScript et TSX par un comptage
-d'accolades qui saute les chaînes et les commentaires. Au hasard, et non « la
-plus récente » : le code qu'on ne comprend plus n'est pas toujours celui qu'on
-vient d'écrire.
+une fonction parmi celles de 4 à 60 lignes. Les fonctions Python sont repérées
+avec `ast`, les fonctions TypeScript et TSX par un comptage d'accolades qui
+saute les chaînes et les commentaires. Le tirage est pondéré, pas classé : une
+fonction qui cache un piège sort plus souvent, sans que les autres cessent de
+sortir.
 
-**Les cartes** (`evaluateur.py`) envoient le code à `mistral-small-latest` et
+**Le repérage** (`reperage.py`) désigne, dans un extrait, les lignes qui
+méritent une question : valeur par défaut mutable, capture tardive, tableau de
+dépendances, `shell=True`, SQL assemblé à la main. Entièrement local, sans
+modèle — une notion signalée est dans le code, sans discussion possible. C'est
+aussi ce qui rend le point sécurité honnête : il n'est pas réclamé à chaque
+série, il n'apparaît que lorsqu'un motif dangereux est réellement là. Une
+fonction sur laquelle il n'a rien à dire n'est pas retenue.
+
+**Les cartes** (`generateur.py`) envoient le code à `mistral-small-latest` et
 en attendent trois ou quatre questions, chacune avec ses réponses possibles, la
 bonne, et le texte qui explique pourquoi ce code est écrit comme ça. Un modèle
 tiers plutôt que celui qui a écrit le code : on ne fait pas passer

@@ -43,7 +43,12 @@ from connais_ton_code.application import (  # noqa: E402
     _mode_barre_de_menus,
 )
 from connais_ton_code.barre_menu import BarreMenu  # noqa: E402
-from connais_ton_code.cartes import Carte, Forme, Serie  # noqa: E402
+from connais_ton_code.cartes import (  # noqa: E402
+    Carte,
+    Forme,
+    Serie,
+    bonne_reponse,
+)
 from connais_ton_code.etats import Etat, transition_valide  # noqa: E402
 from connais_ton_code.fenetre_principale import FenetrePrincipale  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
@@ -89,7 +94,6 @@ CARTES: tuple[Carte, ...] = (
     Carte(
         forme=Forme.QCM,
         question="Ligne 5, pourquoi trier avant de boucler ?",
-        reponse="Pour que les journées se remplissent dans l'ordre",
         explication=(
             "Le regroupement lui-même n'a pas besoin d'ordre : un dictionnaire "
             "accepterait les évènements en vrac. Le tri sert aux listes "
@@ -102,53 +106,53 @@ CARTES: tuple[Carte, ...] = (
             "Parce que defaultdict l'exige",
             "Pour accélérer la conversion de fuseau",
         ),
+        bonne=0,
         ligne=5,
     ),
     Carte(
         forme=Forme.VRAI_FAUX,
         question="Ligne 8 : cette soustraction modifie l'évènement d'origine.",
-        reponse="Faux",
         explication=(
             "`locale` est une variable locale, obtenue par conversion : la "
             "réassigner ne touche pas à `evenement.horodatage`. C'est ce qui "
             "permet de décaler la journée sans réécrire les données lues."
         ),
         options=("Vrai", "Faux"),
+        bonne=1,
         ligne=8,
     ),
     Carte(
         forme=Forme.REPERER,
         question="Quelle ligne rattache une session nocturne à la veille ?",
-        reponse="7",
         explication=(
             "La journée d'usage commence à quatre heures du matin : en deçà, "
             "on est encore dans la soirée de la veille. Le test est la seule "
             "ligne à porter cette convention ; la ligne suivante ne fait "
             "qu'appliquer le décalage qu'elle a décidé."
         ),
+        bonne=7,
         ligne=0,
     ),
     Carte(
         forme=Forme.PREDIRE,
         question="Ligne 11 : quel type prend chaque valeur du dictionnaire rendu ?",
-        reponse="tuple",
         explication=(
             "Les listes accumulées pendant la boucle sont figées en tuples au "
             "moment de rendre le résultat. L'appelant repart donc avec quelque "
             "chose qu'il ne peut pas modifier par mégarde."
         ),
-        variantes=("tuples", "un tuple"),
+        attendu=("tuple", "tuples", "un tuple"),
         ligne=11,
     ),
     Carte(
         forme=Forme.NOMMER,
         question="Ligne 3 : comment s'appelle ce dictionnaire à valeur par défaut ?",
-        reponse="defaultdict",
         explication=(
             "`defaultdict(list)` fabrique la liste manquante à la première "
             "visite d'une date. C'est ce qui permet à la ligne 9 d'appeler "
             "`append` sans avoir jamais créé la journée."
         ),
+        notion="defaultdict",
         ligne=3,
     ),
 )
@@ -172,8 +176,22 @@ class GenerateurFige:
 # ----------------------------------------------------------------------
 
 
+def _reponse_juste(carte: Carte) -> str:
+    """Ce que la main ferait pour répondre juste : le libellé, ou le numéro.
+
+    Distinct de `bonne_reponse`, qui rend de quoi *afficher* la réponse —
+    « ligne 7 » se lit bien mais ne se clique pas.
+    """
+    if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
+        return carte.options[carte.bonne]
+    if carte.forme is Forme.REPERER:
+        return str(carte.bonne)
+    return carte.notion or carte.attendu[0]
+
+
 def _mauvaise_option(carte: Carte) -> str:
-    return next(option for option in carte.options if option != carte.reponse)
+    juste = _reponse_juste(carte)
+    return next(option for option in carte.options if option != juste)
 
 
 def _cliquer_option(panneau: Panneau, texte: str) -> bool:
@@ -199,12 +217,12 @@ def _cliquer_ligne(panneau: Panneau, ligne: int) -> bool:
 def _repondre(panneau: Panneau, carte: Carte, juste: bool) -> bool:
     if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
         return _cliquer_option(
-            panneau, carte.reponse if juste else _mauvaise_option(carte)
+            panneau, _reponse_juste(carte) if juste else _mauvaise_option(carte)
         )
     if carte.forme is Forme.REPERER:
-        attendue = int(carte.reponse)
+        attendue = carte.bonne
         return _cliquer_ligne(panneau, attendue if juste else attendue - 5)
-    panneau._champ_mot.setText(carte.reponse if juste else "pasdutout")
+    panneau._champ_mot.setText(_reponse_juste(carte) if juste else "pasdutout")
     panneau._bouton_valider.click()
     return True
 
@@ -352,13 +370,8 @@ def main() -> int:
             f"carte {numero} ({marque}) : la bonne réponse n'est rappelée qu'en cas d'erreur",
         )
         if not juste:
-            attendue = (
-                f"ligne {modele.reponse}"
-                if modele.forme is Forme.REPERER
-                else modele.reponse
-            )
             _verifier(
-                attendue in panneau._etiquette_bonne_reponse.text(),
+                bonne_reponse(modele) in panneau._etiquette_bonne_reponse.text(),
                 f"carte {numero} (faux) : la bonne réponse est donnée en clair",
             )
         _verifier(
