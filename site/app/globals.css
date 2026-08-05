@@ -88,7 +88,11 @@ body {
       transparent 1px
     );
   background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(
+    ellipse 100% 60% at 50% 0%,
+    #000 30%,
+    transparent 75%
+  );
 }
 
 /** Un halo diffus. La couleur et la position sont posées à l'usage. */
@@ -133,6 +137,47 @@ body {
   opacity: 1;
 }
 
+/**
+ * Un trait lumineux qui fait le tour de la bordure — d'après `border-beam`
+ * de MagicUI (21st.dev).
+ *
+ * Écrit ici plutôt qu'en classes utilitaires : le composant d'origine passe
+ * par des valeurs arbitraires de Tailwind, qui ne produisent pas le
+ * `mask-composite` attendu — le dégradé recouvre alors tout l'intérieur du
+ * cadre au lieu du seul liseré. En CSS, on écrit aussi la variante préfixée
+ * dont WebKit a besoin, et dont le mot-clé diffère : `source-in` pour
+ * `intersect`.
+ */
+.faisceau {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: calc(var(--epaisseur, 1.5) * 1px) solid transparent;
+  pointer-events: none;
+
+  /* Deux calques : l'un rogné sur la boîte de rembourrage, l'autre sur celle
+     de la bordure. Leur intersection est l'anneau, et rien d'autre. */
+  -webkit-mask:
+    linear-gradient(transparent, transparent), linear-gradient(#fff, #fff);
+  -webkit-mask-clip: padding-box, border-box;
+  -webkit-mask-composite: source-in;
+  mask: linear-gradient(transparent, transparent), linear-gradient(#fff, #fff);
+  mask-clip: padding-box, border-box;
+  mask-composite: intersect;
+}
+
+.faisceau::after {
+  content: "";
+  position: absolute;
+  aspect-ratio: 1;
+  width: calc(var(--taille, 220) * 1px);
+  background: linear-gradient(to left, var(--depuis), var(--vers), transparent);
+  offset-anchor: 90% 50%;
+  offset-path: rect(0 auto auto 0 round calc(var(--taille, 220) * 1px));
+  animation: faisceau-bordure calc(var(--duree, 9) * 1s) linear infinite;
+  animation-delay: var(--retard, 0s);
+}
+
 /* ------------------------------------------------------------ Animations */
 
 @keyframes derive {
@@ -163,6 +208,14 @@ body {
   50%,
   100% {
     opacity: 0;
+  }
+}
+
+/** Le tour de piste du faisceau de bordure. `offset-distance` fait avancer
+    le trait le long du `offset-path` posé par le composant. */
+@keyframes faisceau-bordure {
+  to {
+    offset-distance: 100%;
   }
 }
 

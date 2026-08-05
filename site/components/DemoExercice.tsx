@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { SegmentsColores, longueur } from "@/components/Code";
+import { FaisceauBordure } from "@/components/FaisceauBordure";
 import { useDansLeCadre, useMouvementSobre } from "@/lib/cadre";
 import { colorer } from "@/lib/coloration";
 
@@ -144,6 +145,18 @@ export function DemoExercice() {
       {/* Le liseré clair du haut : la lumière tombe d'en haut, comme sur une
           fenêtre de macOS. */}
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
+      {/* Deux faisceaux décalés d'un demi-tour : le cadre n'est jamais tout à
+          fait éteint, sans pour autant clignoter. */}
+      <FaisceauBordure duree={10} taille={340} epaisseur={2} />
+      <FaisceauBordure
+        duree={10}
+        taille={340}
+        epaisseur={2}
+        retard={5}
+        depuis="var(--color-menthe)"
+        vers="var(--color-accent)"
+      />
 
       {/* ------------------------------------------------ Barre de la fenêtre */}
       <div className="border-bordure flex items-center gap-2.5 border-b px-3 py-3 sm:gap-3 sm:px-4">

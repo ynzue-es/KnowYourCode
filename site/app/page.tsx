@@ -5,6 +5,7 @@ import { Carte } from "@/components/Carte";
 import { DemoExercice } from "@/components/DemoExercice";
 import { DonneesStructurees } from "@/components/DonneesStructurees";
 import { Entete } from "@/components/Entete";
+import { FaisceauBordure } from "@/components/FaisceauBordure";
 import { LigneSpinner } from "@/components/LigneSpinner";
 import { Logo } from "@/components/Logo";
 import { Revelation } from "@/components/Revelation";
@@ -374,6 +375,7 @@ export default async function Accueil() {
                 aria-hidden="true"
                 className="halo bg-accent absolute -top-24 -left-16 h-56 w-56 rounded-full opacity-20"
               />
+              <FaisceauBordure duree={14} taille={420} epaisseur={2} />
               <div className="relative">
                 <h2
                   id="fin-titre"
