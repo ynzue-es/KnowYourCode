@@ -3,7 +3,7 @@
 
 Le scénario suit le chemin réel d'un utilisateur : il ouvre le panneau, part
 sur une série, répond carte après carte, lit l'explication, arrive au bilan,
-en relance une, et referme. La série est écrite en dur et couvre les cinq
+en relance une, et referme. La série est écrite en dur et couvre les deux
 formes ; elle est jouée deux fois, une fois toute juste et une fois toute
 fausse, parce que le retour en cas d'erreur est justement ce qui compte.
 
@@ -32,8 +32,7 @@ if str(RACINE) not in sys.path:
 DOSSIER_TEST = tempfile.mkdtemp(prefix="knowyourcode-verif-panneau-")
 os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 
-from PyQt6.QtCore import QPoint, Qt, QTimer  # noqa: E402
-from PyQt6.QtGui import QTextCursor  # noqa: E402
+from PyQt6.QtCore import Qt, QTimer  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
@@ -122,36 +121,50 @@ CARTES: tuple[Carte, ...] = (
         ligne=8,
     ),
     Carte(
-        forme=Forme.REPERER,
-        question="Quelle ligne rattache une session nocturne à la veille ?",
+        forme=Forme.QCM,
+        question="Ligne 7 : à quoi sert de comparer l'heure à quatre ?",
         explication=(
             "La journée d'usage commence à quatre heures du matin : en deçà, "
-            "on est encore dans la soirée de la veille. Le test est la seule "
-            "ligne à porter cette convention ; la ligne suivante ne fait "
-            "qu'appliquer le décalage qu'elle a décidé."
+            "on est encore dans la soirée de la veille. C'est la seule ligne à "
+            "porter cette convention ; la suivante ne fait qu'appliquer le "
+            "décalage qu'elle a décidé."
         ),
-        bonne=7,
-        ligne=0,
+        options=(
+            "À rattacher une session nocturne à la veille",
+            "À ignorer les évènements du petit matin",
+            "À corriger un décalage de fuseau horaire",
+            "À éviter une division par zéro sur `locale`",
+        ),
+        bonne=0,
+        ligne=7,
     ),
     Carte(
-        forme=Forme.PREDIRE,
-        question="Ligne 11 : quel type prend chaque valeur du dictionnaire rendu ?",
+        forme=Forme.QCM,
+        question="Ligne 11 : que prend chaque valeur du dictionnaire rendu ?",
         explication=(
             "Les listes accumulées pendant la boucle sont figées en tuples au "
             "moment de rendre le résultat. L'appelant repart donc avec quelque "
             "chose qu'il ne peut pas modifier par mégarde."
         ),
-        attendu=("tuple", "tuples", "un tuple"),
+        options=(
+            "Un tuple, figé à la sortie",
+            "La liste construite pendant la boucle",
+            "Le `defaultdict` lui-même",
+            "Un dictionnaire par évènement",
+        ),
+        bonne=0,
         ligne=11,
     ),
     Carte(
-        forme=Forme.NOMMER,
-        question="Ligne 3 : comment s'appelle ce dictionnaire à valeur par défaut ?",
+        forme=Forme.VRAI_FAUX,
+        question="Ligne 3 : sans `defaultdict`, la ligne 9 lèverait une erreur.",
         explication=(
             "`defaultdict(list)` fabrique la liste manquante à la première "
-            "visite d'une date. C'est ce qui permet à la ligne 9 d'appeler "
-            "`append` sans avoir jamais créé la journée."
+            "visite d'une date. Avec un dictionnaire ordinaire, `par_jour` "
+            "n'aurait pas la clé et `append` lèverait un `KeyError`."
         ),
+        options=("Vrai", "Faux"),
+        bonne=0,
         notion="defaultdict",
         ligne=3,
     ),
@@ -178,21 +191,12 @@ class GenerateurFige:
 
 
 # ----------------------------------------------------------------------
-# Les gestes de réponse, un par forme
+# Le geste de réponse : un clic sur une option, et rien d'autre
 # ----------------------------------------------------------------------
 
 
 def _reponse_juste(carte: Carte) -> str:
-    """Ce que la main ferait pour répondre juste : le libellé, ou le numéro.
-
-    Distinct de `bonne_reponse`, qui rend de quoi *afficher* la réponse —
-    « ligne 7 » se lit bien mais ne se clique pas.
-    """
-    if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
-        return carte.options[carte.bonne]
-    if carte.forme is Forme.REPERER:
-        return str(carte.bonne)
-    return carte.notion or carte.attendu[0]
+    return carte.options[carte.bonne]
 
 
 def _mauvaise_option(carte: Carte) -> str:
@@ -201,42 +205,18 @@ def _mauvaise_option(carte: Carte) -> str:
 
 
 def _cliquer_option(panneau: Panneau, texte: str) -> bool:
+    """Clique vraiment le bouton, comme le ferait la main."""
     for bouton in panneau._boutons_options:
         if bouton.text() == texte:
-            bouton.click()
+            QTest.mouseClick(bouton, Qt.MouseButton.LeftButton)
             return True
     return False
 
 
-def _cliquer_ligne(panneau: Panneau, ligne: int) -> bool:
-    """Clique vraiment dans le code, à la souris, comme le ferait la main."""
-    zone = panneau._zone_code
-    bloc = zone.document().findBlockByNumber(ligne - 1)
-    if not bloc.isValid():
-        return False
-    rectangle = zone.cursorRect(QTextCursor(bloc))
-    point = QPoint(rectangle.center().x() + 24, rectangle.center().y())
-    QTest.mouseClick(zone.viewport(), Qt.MouseButton.LeftButton, pos=point)
-    return True
-
-
 def _repondre(panneau: Panneau, carte: Carte, juste: bool) -> bool:
-    if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
-        return _cliquer_option(
-            panneau, _reponse_juste(carte) if juste else _mauvaise_option(carte)
-        )
-    if carte.forme is Forme.REPERER:
-        attendue = carte.bonne
-        return _cliquer_ligne(panneau, attendue if juste else attendue - 5)
-    panneau._champ_mot.setText(_reponse_juste(carte) if juste else "pasdutout")
-    panneau._bouton_valider.click()
-    return True
-
-
-def _page_attendue(carte: Carte) -> int:
-    if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
-        return 0
-    return 1 if carte.forme is Forme.REPERER else 2
+    return _cliquer_option(
+        panneau, _reponse_juste(carte) if juste else _mauvaise_option(carte)
+    )
 
 
 def main() -> int:
@@ -297,9 +277,11 @@ def main() -> int:
             panneau._etiquette_question.text() == modele.question,
             f"carte {numero} ({marque}) : la question posée est celle de la carte",
         )
+        attendues = 2 if modele.forme is Forme.VRAI_FAUX else 4
         _verifier(
-            panneau._pile_reponses.currentIndex() == _page_attendue(modele),
-            f"carte {numero} ({marque}) : la forme {modele.forme.name} a son geste",
+            len(panneau._boutons_options) == attendues,
+            f"carte {numero} ({marque}) : la forme {modele.forme.name} pose "
+            f"{attendues} boutons",
         )
 
         if numero == 1 and juste:
@@ -326,30 +308,14 @@ def main() -> int:
                 "un QCM propose quatre options cliquables",
             )
 
-        if modele.forme is Forme.VRAI_FAUX:
-            _verifier(
-                len(panneau._boutons_options) == 2,
-                f"carte {numero} ({marque}) : un vrai ou faux propose deux options",
-            )
-
-        if modele.forme is Forme.REPERER:
-            _verifier(
-                panneau._zone_code._cliquable,
-                f"carte {numero} ({marque}) : les lignes du code deviennent cliquables",
-            )
-            _verifier(
-                panneau._zone_code._ligne_visee == 0,
-                f"carte {numero} ({marque}) : rien n'est souligné, la ligne est la réponse",
-            )
-        else:
-            _verifier(
-                not panneau._zone_code._cliquable,
-                f"carte {numero} ({marque}) : hors repérage, le code n'est pas cliquable",
-            )
-            _verifier(
-                panneau._zone_code._ligne_visee == modele.ligne,
-                f"carte {numero} ({marque}) : la ligne visée est mise en évidence",
-            )
+        _verifier(
+            panneau._zone_code._ligne_visee == modele.ligne,
+            f"carte {numero} ({marque}) : la ligne visée est mise en évidence",
+        )
+        _verifier(
+            len(panneau._zone_code.extraSelections()) == 1,
+            f"carte {numero} ({marque}) : une seule bande, celle de la ligne visée",
+        )
 
         _verifier(
             _repondre(panneau, modele, juste),

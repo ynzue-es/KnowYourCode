@@ -21,7 +21,6 @@ from __future__ import annotations
 import ast
 import re
 import textwrap
-import unicodedata
 from dataclasses import dataclass
 
 # Les trois familles de repères. La catégorie ne sert pas qu'à ranger : elle
@@ -69,57 +68,64 @@ class Repere:
 # Le vocabulaire
 # ---------------------------------------------------------------------------
 
-# Les formes acceptées quand on demande de nommer une notion. L'anglais y
-# figure parce que c'est le mot que tout le monde a en tête — refuser
-# « closure » à quelqu'un qui a compris la fermeture serait une brimade, pas
-# une correction. La comparaison se fait sans accents ni casse : ces formes
-# n'ont pas besoin d'être écrites deux fois.
-NOTIONS: dict[str, tuple[str, ...]] = {
-    "fermeture": ("closure", "cloture"),
-    "décorateur": ("decorator",),
-    "compréhension": ("comprehension de liste", "list comprehension"),
-    "générateur": ("generator", "iterateur paresseux"),
-    "gestionnaire de contexte": ("context manager", "with"),
-    "déballage": ("unpacking", "desempaquetage", "splat"),
-    "destructuration": ("destructuring", "deconstruction"),
-    "court-circuit": ("evaluation paresseuse", "short circuit"),
-    "coercition": ("conversion implicite", "coercion"),
-    "mémoïsation": ("memoization", "mise en cache", "cache"),
-    "effet de bord": ("side effect",),
-    "récursion": ("recursion", "appel recursif"),
-    "tranche": ("slice", "slicing", "decoupage"),
-    "expression ternaire": ("ternaire", "operateur ternaire"),
-    "morse": ("walrus", "operateur morse", "affectation dans l'expression"),
-    "chaînage optionnel": ("optional chaining", "chainage sur"),
-    "fusion nulle": ("nullish coalescing", "coalescence nulle"),
-    "diffusion": ("spread", "operateur de diffusion", "etalement"),
-    "portée tardive": ("late binding", "capture tardive", "liaison tardive"),
-    "identité": ("comparaison d'identite", "identity"),
-    "propagation": ("propagation d'exception", "remontee", "bubbling"),
-}
+# Le vocabulaire que le projet sait reconnaître. Ces mots ne se tapent plus —
+# les cartes se répondent au clic — mais ils servent toujours deux fois : ils
+# distinguent les sujets d'une même série, et le tableau de bord les emploie
+# pour dire sur quoi l'on bute d'une semaine à l'autre.
+NOTIONS: frozenset[str] = frozenset(
+    {
+        "fermeture",
+        "décorateur",
+        "compréhension",
+        "compréhension de dictionnaire",
+        "générateur",
+        "gestionnaire de contexte",
+        "déballage",
+        "destructuration",
+        "court-circuit",
+        "coercition",
+        "mémoïsation",
+        "effet de bord",
+        "récursion",
+        "tranche",
+        "expression ternaire",
+        "morse",
+        "chaînage optionnel",
+        "fusion nulle",
+        "diffusion",
+        "portée tardive",
+        "identité",
+        "propagation",
+        "comparaison chaînée",
+        "annotation de type",
+        "énumération",
+    }
+)
 
 
-def _normaliser(mot: str) -> str:
-    """Réduit un mot à ce qui compte pour le comparer.
+def sujets_distincts(reperes: list[Repere]) -> list[Repere]:
+    """Ne garde qu'un repère par sujet, l'ordre et les poids intacts.
 
-    Sans accents, sans casse, sans ponctuation, sans pluriel : quelqu'un qui
-    tape « Closures » a la bonne réponse et ne doit pas être recalé pour un
-    « s ». On ne cherche pas à noter l'orthographe.
+    Deux lignes qui illustrent la même chose ne font pas deux questions : elles
+    font deux fois la même. Le cas est loin d'être rare — un composant React
+    répand le même `...props` sur quatre lignes, une suite de tests répète le
+    même `assert`. Mesuré avant d'écrire cette fonction : quatre séries sur
+    cinq posaient deux fois le même sujet.
+
+    Le tri est fait en amont, le plus lourd d'abord : garder le premier de
+    chaque sujet, c'est garder sa meilleure occurrence.
     """
-    sans_accent = unicodedata.normalize("NFD", mot.strip().lower())
-    sans_accent = "".join(c for c in sans_accent if unicodedata.category(c) != "Mn")
-    nettoye = re.sub(r"[^a-z0-9 ]+", " ", sans_accent)
-    nettoye = re.sub(r"\s+", " ", nettoye).strip()
-    return nettoye[:-1] if nettoye.endswith("s") and len(nettoye) > 3 else nettoye
-
-
-def notion_reconnue(saisie: str, notion: str) -> bool:
-    """Dit si la saisie désigne bien la notion attendue."""
-    if not saisie.strip():
-        return False
-    attendues = {_normaliser(notion)}
-    attendues.update(_normaliser(forme) for forme in NOTIONS.get(notion, ()))
-    return _normaliser(saisie) in attendues
+    vus: set[str] = set()
+    retenus: list[Repere] = []
+    for repere in reperes:
+        # L'intitulé sert de sujet à défaut de notion : c'est la consigne
+        # envoyée au générateur, donc bien ce qui déciderait de la question.
+        sujet = repere.notion or repere.intitule
+        if sujet in vus:
+            continue
+        vus.add(sujet)
+        retenus.append(repere)
+    return retenus
 
 
 # ---------------------------------------------------------------------------
@@ -127,16 +133,41 @@ def notion_reconnue(saisie: str, notion: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def reperer(code: str, langage: str) -> list[Repere]:
+def est_un_test(chemin: str) -> bool:
+    """Dit si ce fichier est une suite de tests.
+
+    Quelques motifs se lisent autrement selon l'endroit. Un `assert` dans du
+    code de production est une garde fragile, qui disparaît sous `-O` ; dans un
+    test, c'est la vérification elle-même, et personne ne lance ses tests avec
+    `-O`. Signaler les deux revenait à poser cinq cents fois la même question
+    sur un dépôt bien testé.
+    """
+    minuscules = chemin.lower().replace("\\", "/")
+    dernier = minuscules.rsplit("/", 1)[-1]
+    return (
+        dernier.startswith("test_")
+        or dernier.endswith(("_test.py", ".test.ts", ".test.tsx", ".spec.ts"))
+        or "/tests/" in minuscules
+        or "/__tests__/" in minuscules
+    )
+
+
+def reperer(code: str, langage: str, chemin: str = "") -> list[Repere]:
     """Rend les lignes dignes d'une question, la plus prometteuse en tête.
 
     Une ligne au plus par repère : deux notions sur la même ligne rendraient
     la question ambiguë — « que fait cette ligne ? » n'a pas de bonne réponse
     quand il s'y passe deux choses. On garde la plus lourde et on laisse
     l'autre.
+
+    `chemin` est facultatif et ne sert qu'aux motifs dont la lecture dépend de
+    l'endroit ; sans lui, le repérage se comporte comme si le fichier était du
+    code ordinaire.
     """
     trouves = (
-        _reperer_python(code) if langage == "python" else _reperer_typescript(code)
+        _reperer_python(code, est_un_test(chemin))
+        if langage == "python"
+        else _reperer_typescript(code)
     )
 
     meilleurs: dict[int, Repere] = {}
@@ -245,7 +276,7 @@ def _vaut_faux(noeud: ast.expr | None) -> bool:
     return isinstance(noeud, ast.Constant) and noeud.value is False
 
 
-def _reperer_python(code: str) -> list[Repere]:
+def _reperer_python(code: str, dans_un_test: bool = False) -> list[Repere]:
     racine = _arbre(code)
     if racine is None:
         return []
@@ -255,9 +286,10 @@ def _reperer_python(code: str) -> list[Repere]:
     trouves += _python_signature(racine)
     trouves += _python_flux(racine, lignes)
     trouves += _python_expressions(racine)
+    trouves += _python_courant(racine)
     trouves += _python_repli(racine)
     trouves += _python_fermetures(racine)
-    trouves += _python_securite(racine)
+    trouves += _python_securite(racine, dans_un_test)
     return trouves
 
 
@@ -503,6 +535,11 @@ def _python_expressions(racine: ast.AST) -> list[Repere]:
     for noeud in ast.walk(racine):
         if isinstance(noeud, (ast.ListComp, ast.SetComp, ast.DictComp)):
             filtree = any(g.ifs for g in noeud.generators)
+            # Une compréhension de dictionnaire est un sujet à part : elle
+            # construit des paires, et se confond volontiers avec la syntaxe
+            # d'un ensemble. Les distinguer, c'est deux questions au lieu
+            # d'une seule répétée.
+            dictionnaire = isinstance(noeud, ast.DictComp)
             trouves.append(
                 Repere(
                     ligne=noeud.lineno,
@@ -514,7 +551,11 @@ def _python_expressions(racine: ast.AST) -> list[Repere]:
                     ),
                     categorie=LANGAGE,
                     poids=POIDS_NOTION if filtree else POIDS_COURANT,
-                    notion="compréhension",
+                    notion=(
+                        "compréhension de dictionnaire"
+                        if dictionnaire
+                        else "compréhension"
+                    ),
                 )
             )
 
@@ -647,6 +688,145 @@ def _python_expressions(racine: ast.AST) -> list[Repere]:
     return trouves
 
 
+def _python_courant(racine: ast.AST) -> list[Repere]:
+    """Les tournures ordinaires qui portent quand même une leçon.
+
+    Ces motifs-là ne signalent aucun défaut : le code est bon. Ils existent
+    parce qu'une série tient sur un seul extrait, et qu'un extrait n'offre en
+    moyenne que deux ou trois sujets — sans eux, la moitié des séries
+    s'arrêtaient à deux cartes. Chacun doit donc apprendre quelque chose qui se
+    transporte hors de ce fichier, sinon il ne fait que remplir.
+    """
+    trouves: list[Repere] = []
+
+    for noeud in ast.walk(racine):
+        if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute):
+            if noeud.func.attr == "get" and not noeud.keywords:
+                # `.get(cle)` rend `None` sans rien dire, `.get(cle, defaut)`
+                # décide de la valeur manquante. La différence est exactement
+                # ce qui se paie plus loin, et elle tient sur cette ligne.
+                avec_defaut = len(noeud.args) >= 2
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "la valeur de remplacement est donnée sur place, "
+                            "donc une clé absente ne remonte jamais comme telle"
+                            if avec_defaut
+                            else "une clé absente rend `None` au lieu de lever, "
+                            "et l'absence ne se distingue plus d'un `None` rangé"
+                        ),
+                        categorie=LANGAGE if avec_defaut else ROBUSTESSE,
+                        poids=POIDS_COURANT if avec_defaut else POIDS_PIEGE,
+                    )
+                )
+
+            elif noeud.func.attr == "join":
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "l'assemblage se fait en une passe, là où une "
+                            "concaténation dans une boucle recopierait la "
+                            "chaîne entière à chaque tour"
+                        ),
+                        categorie=LANGAGE,
+                        poids=POIDS_COURANT,
+                    )
+                )
+
+        elif isinstance(noeud, ast.Compare):
+            if len(noeud.ops) > 1:
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "les comparaisons s'enchaînent et la valeur du "
+                            "milieu n'est évaluée qu'une fois"
+                        ),
+                        categorie=LANGAGE,
+                        poids=POIDS_NOTION,
+                        notion="comparaison chaînée",
+                    )
+                )
+            elif _longueur_comparee(noeud):
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "la longueur est comparée à zéro là où la collection "
+                            "elle-même dit déjà si elle est vide"
+                        ),
+                        categorie=LANGAGE,
+                        poids=POIDS_COURANT,
+                    )
+                )
+
+        elif isinstance(noeud, ast.AnnAssign) and noeud.annotation is not None:
+            trouves.append(
+                Repere(
+                    ligne=noeud.lineno,
+                    intitule=(
+                        "l'annotation n'est pas vérifiée à l'exécution : elle "
+                        "renseigne la relecture et les outils, rien de plus"
+                    ),
+                    categorie=LANGAGE,
+                    poids=POIDS_NOTION,
+                    notion="annotation de type",
+                )
+            )
+
+        elif isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name):
+            if noeud.func.id == "enumerate":
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "le rang et l'élément arrivent ensemble, sans "
+                            "indexer la collection une seconde fois"
+                        ),
+                        categorie=LANGAGE,
+                        poids=POIDS_NOTION,
+                        notion="énumération",
+                    )
+                )
+            elif noeud.func.id == "isinstance" and _plusieurs_types(noeud):
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "plusieurs types sont acceptés d'un seul test, et "
+                            "les sous-classes le sont avec eux"
+                        ),
+                        categorie=LANGAGE,
+                        poids=POIDS_COURANT,
+                    )
+                )
+
+    return trouves
+
+
+def _longueur_comparee(noeud: ast.Compare) -> bool:
+    """Dit si la ligne compare une longueur à zéro, dans un sens ou dans l'autre."""
+    appel_longueur = (
+        isinstance(noeud.left, ast.Call)
+        and isinstance(noeud.left.func, ast.Name)
+        and noeud.left.func.id == "len"
+    )
+    if not appel_longueur or not isinstance(noeud.ops[0], (ast.Eq, ast.NotEq)):
+        return False
+    droite = noeud.comparators[0]
+    return isinstance(droite, ast.Constant) and droite.value == 0
+
+
+def _plusieurs_types(noeud: ast.Call) -> bool:
+    return (
+        len(noeud.args) >= 2
+        and isinstance(noeud.args[1], ast.Tuple)
+        and len(noeud.args[1].elts) > 1
+    )
+
+
 def _python_repli(racine: ast.AST) -> list[Repere]:
     """Le `or` employé comme valeur de repli, et lui seul.
 
@@ -765,7 +945,7 @@ _APPELS_SENSIBLES: dict[str, str] = {
 }
 
 
-def _python_securite(racine: ast.AST) -> list[Repere]:
+def _python_securite(racine: ast.AST, dans_un_test: bool = False) -> list[Repere]:
     trouves: list[Repere] = []
 
     for noeud in ast.walk(racine):
@@ -855,20 +1035,24 @@ def _python_securite(racine: ast.AST) -> list[Repere]:
                     )
                 )
 
-    for noeud in ast.walk(racine):
-        if isinstance(noeud, ast.Assert):
-            trouves.append(
-                Repere(
-                    ligne=noeud.lineno,
-                    intitule=(
-                        "les `assert` disparaissent quand Python tourne avec "
-                        "`-O` : une vérification qui compte ne peut pas reposer "
-                        "dessus"
-                    ),
-                    categorie=SECURITE,
-                    poids=POIDS_SECURITE,
+    # Le reproche fait à `assert` — disparaître sous `-O` — n'a aucun sens dans
+    # une suite de tests, où il *est* la vérification et où personne ne lance
+    # l'interpréteur optimisé.
+    if not dans_un_test:
+        for noeud in ast.walk(racine):
+            if isinstance(noeud, ast.Assert):
+                trouves.append(
+                    Repere(
+                        ligne=noeud.lineno,
+                        intitule=(
+                            "les `assert` disparaissent quand Python tourne avec "
+                            "`-O` : une vérification qui compte ne peut pas reposer "
+                            "dessus"
+                        ),
+                        categorie=SECURITE,
+                        poids=POIDS_SECURITE,
+                    )
                 )
-            )
 
     return trouves
 

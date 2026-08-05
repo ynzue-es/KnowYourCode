@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .cartes import Carte, Correction, Forme
+from .cartes import Carte, Correction
 from .modeles import ANCIENNE, CARTE, PASSE, EntreeHistorique, Extrait
 from .stockage import dossier_donnees, ecrire_json, lire_json
 
@@ -155,10 +155,7 @@ class Historique:
                 "forme": carte.forme.name,
                 "categorie": carte.categorie,
                 "notion": carte.notion,
-                # Pour une carte « repérer », la ligne visée est justement ce
-                # qu'on demandait de trouver : elle est dans `bonne`, pas dans
-                # `ligne`, qui doit rester vide sous peine de donner la réponse.
-                "ligne": carte.bonne if carte.forme is Forme.REPERER else carte.ligne,
+                "ligne": carte.ligne,
                 "juste": correction.juste,
             },
         )

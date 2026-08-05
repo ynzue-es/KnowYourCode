@@ -42,7 +42,7 @@ from connais_ton_code.extraction import fonctions  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import EntreeHistorique  # noqa: E402
 from connais_ton_code import rappel  # noqa: E402
-from connais_ton_code.reperage import notion_reconnue, reperer  # noqa: E402
+from connais_ton_code.reperage import reperer, sujets_distincts  # noqa: E402
 from connais_ton_code.statistiques import calculer_statistiques  # noqa: E402
 
 _constats: list[tuple[bool, str]] = []
@@ -282,19 +282,33 @@ def verifier_reperage() -> None:
                 description,
             )
 
-    for saisie, notion, attendu in (
-        ("Closures", "fermeture", True),
-        ("  CLÔTURE ", "fermeture", True),
-        ("décorateurs", "décorateur", True),
-        ("memoization", "mémoïsation", True),
-        ("boucle", "fermeture", False),
-        ("", "fermeture", False),
-    ):
-        _verifier(
-            notion_reconnue(saisie, notion) is attendu,
-            f"« {saisie.strip() or 'rien' } » {'vaut' if attendu else 'ne vaut pas'} "
-            f"« {notion} »",
-        )
+    # Le dédoublonnage par sujet : c'est lui qui empêche une série de poser
+    # quatre fois la même question sur quatre lignes qui se ressemblent.
+    repetitif = """def rendre(donnees):
+    noms = [d.nom for d in donnees]
+    ages = [d.age for d in donnees]
+    villes = [d.ville for d in donnees]
+    return noms, ages, villes
+"""
+    bruts = reperer(repetitif, "python")
+    tries = sujets_distincts(bruts)
+    _verifier(
+        len(bruts) > len(tries),
+        f"trois lignes du même motif donnent {len(bruts)} repères mais "
+        f"{len(tries)} sujet(s)",
+    )
+    _verifier(
+        len({r.notion or r.intitule for r in tries}) == len(tries),
+        "après tri, deux repères ne partagent jamais un sujet",
+    )
+    _verifier(
+        bool(tries) and tries[0] is bruts[0],
+        "le tri garde la meilleure occurrence de chaque sujet, pas la première venue",
+    )
+    _verifier(
+        sujets_distincts([]) == [],
+        "un extrait sans repère ne fait pas lever le tri",
+    )
 
 
 def verifier_rappel() -> None:
@@ -396,16 +410,8 @@ def verifier_lecture_historique() -> None:
 
 
 def _reponse_juste(carte) -> str:
-    """Ce qu'il faut répondre pour tomber juste, dans la forme que le panneau émet.
-
-    Distinct de `bonne_reponse`, qui rend de quoi *afficher* la réponse :
-    « ligne 7 » se lit bien mais ne s'émet pas.
-    """
-    if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
-        return carte.options[carte.bonne]
-    if carte.forme is Forme.REPERER:
-        return str(carte.bonne)
-    return carte.notion or (carte.attendu[0] if carte.attendu else "")
+    """Ce qu'il faut répondre pour tomber juste : le libellé du bon bouton."""
+    return carte.options[carte.bonne]
 
 
 def main() -> int:

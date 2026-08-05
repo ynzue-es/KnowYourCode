@@ -1,8 +1,14 @@
 """Les cartes, et leur correction.
 
-Une carte est une question qui tient en un geste : quatre options, un clic sur
-une ligne, un mot. Une série en compte trois ou quatre, toutes sur le même
-extrait — on atterrit dans une fonction, on la creuse, on repart.
+Une carte est une question qui tient en un clic : quatre options, ou vrai et
+faux. Une série en compte trois ou quatre, toutes sur le même extrait — on
+atterrit dans une fonction, on la creuse, on repart.
+
+Rien ne se tape. On a essayé : faire écrire le nom d'une notion butait sur
+« la diffusion » contre « diffusion », et une réponse juste comptée fausse
+pour un article coûte plus de confiance qu'un mot deviné n'en rapporte. Une
+question qu'on lit vraiment et qu'on tranche d'un clic apprend autant, et ne
+punit personne pour sa frappe.
 
 Le renversement par rapport à l'ancien exercice tient en une phrase :
 l'utilisateur répond court, et c'est l'application qui explique long. Il n'y a
@@ -19,11 +25,11 @@ ne doit atteindre l'écran.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 
 from .modeles import Extrait
-from .reperage import LANGAGE, notion_reconnue
+from .reperage import LANGAGE
 
 # Trois ou quatre : assez pour creuser un extrait, assez peu pour qu'on
 # recommence demain. Le générateur vise ce nombre, l'affichage se contente de
@@ -37,28 +43,13 @@ LONGUEUR_EXPLICATION = 480
 
 
 class Forme(Enum):
-    """Les cinq façons de poser une question, toutes en un geste."""
+    """Les deux façons de poser une question, toutes deux en un clic."""
 
     QCM = auto()
     """Quatre options, une seule bonne."""
 
-    REPERER = auto()
-    """« Quelle ligne fait ceci ? » — on clique la ligne, sans rien taper."""
-
-    PREDIRE = auto()
-    """« Ça vaut quoi ? » — un mot, une valeur."""
-
     VRAI_FAUX = auto()
     """Deux options, deux secondes."""
-
-    NOMMER = auto()
-    """« Comment s'appelle ce que fait cette ligne ? » — le vocabulaire, seul
-    bagage qui se transporte hors du projet."""
-
-
-# Les formes où la réponse est le rang d'une option, par opposition à celles
-# où l'on rend une ligne ou un mot.
-FORMES_A_OPTIONS = frozenset({Forme.QCM, Forme.VRAI_FAUX})
 
 
 @dataclass(frozen=True)
@@ -66,13 +57,9 @@ class Carte:
     """Une question, sa réponse, et ce qu'on en apprend.
 
     `ligne` désigne la ligne visée dans l'extrait, numérotée à partir de 1.
-    Elle sert à surligner le code pendant la question — sauf pour `REPERER`,
-    où la montrer donnerait la réponse : c'est justement ce qu'on demande de
-    trouver.
-
-    `attendu` liste les formes acceptées pour les réponses tapées. Elles sont
-    fixées à la fabrication, ce qui permet de corriger sans modèle ; la
-    comparaison est indulgente sur les accents, la casse et le pluriel.
+    Elle est surlignée pendant la question : c'est elle qu'on interroge, la
+    cacher ne ferait qu'ajouter une devinette à une question qui n'en demande
+    pas.
 
     `explication` est le cœur. Un seul bloc de prose, montré que la réponse
     soit juste ou fausse, parce que c'est le cours et qu'il ne se donne pas
@@ -86,10 +73,11 @@ class Carte:
     ligne: int = 0
     options: tuple[str, ...] = ()
     bonne: int = 0
-    """Rang de la bonne option, ou numéro de ligne attendu pour `REPERER`."""
-    attendu: tuple[str, ...] = field(default_factory=tuple)
+    """Rang de la bonne option dans `options`."""
     categorie: str = LANGAGE
     notion: str | None = None
+    """Le sujet de la carte, quand il en porte un nom. Ne se tape plus, mais
+    sert encore à mesurer sur quoi l'on bute d'une série à l'autre."""
 
 
 @dataclass(frozen=True)
@@ -116,27 +104,15 @@ class Correction:
 def corriger(carte: Carte, reponse: str | int) -> Correction:
     """Corrige une réponse, sans réseau ni modèle.
 
-    Une réponse illisible — un rang hors bornes, un mot vide — vaut une
-    erreur et non une exception : on est dans une boucle d'apprentissage, pas
-    dans un formulaire.
+    Une réponse illisible — un rang hors bornes — vaut une erreur et non une
+    exception : on est dans une boucle d'apprentissage, pas dans un formulaire.
     """
-    if carte.forme in FORMES_A_OPTIONS:
-        # Le rang ou le libellé, indifféremment. Le panneau tient le texte du
-        # bouton cliqué ; l'obliger à retrouver son rang pour le repasser ici
-        # n'ajouterait qu'un endroit de plus où les deux peuvent se désaccorder.
-        juste = _rang(reponse) == carte.bonne or _parmi(
-            reponse, carte.options[carte.bonne : carte.bonne + 1]
-        )
-    elif carte.forme is Forme.REPERER:
-        juste = _rang(reponse) == carte.bonne
-    elif carte.forme is Forme.NOMMER and carte.notion is not None:
-        # La notion connaît ses propres synonymes : `reperage` sait déjà que
-        # « closure » vaut « fermeture », inutile de les recopier ici.
-        juste = notion_reconnue(str(reponse), carte.notion) or _parmi(
-            reponse, carte.attendu
-        )
-    else:
-        juste = _parmi(reponse, carte.attendu)
+    # Le rang ou le libellé, indifféremment. Le panneau tient le texte du
+    # bouton cliqué ; l'obliger à retrouver son rang pour le repasser ici
+    # n'ajouterait qu'un endroit de plus où les deux peuvent se désaccorder.
+    juste = _rang(reponse) == carte.bonne or _parmi(
+        reponse, carte.options[carte.bonne : carte.bonne + 1]
+    )
 
     return Correction(
         juste=juste,
@@ -148,15 +124,9 @@ def corriger(carte: Carte, reponse: str | int) -> Correction:
 
 def bonne_reponse(carte: Carte) -> str:
     """La bonne réponse en toutes lettres, pour l'afficher après coup."""
-    if carte.forme in FORMES_A_OPTIONS:
-        if 0 <= carte.bonne < len(carte.options):
-            return carte.options[carte.bonne]
-        return ""
-    if carte.forme is Forme.REPERER:
-        return f"ligne {carte.bonne}"
-    if carte.notion is not None:
-        return carte.notion
-    return carte.attendu[0] if carte.attendu else ""
+    if 0 <= carte.bonne < len(carte.options):
+        return carte.options[carte.bonne]
+    return ""
 
 
 def _rang(reponse: str | int) -> int:
@@ -229,34 +199,22 @@ def defauts(carte: Carte, code: str) -> list[str]:
         # meilleurs en ligne.
         ennuis.append("explication qui ne cite rien du code")
 
-    if carte.forme in FORMES_A_OPTIONS:
-        attendues = 2 if carte.forme is Forme.VRAI_FAUX else 4
-        if len(carte.options) != attendues:
-            ennuis.append(f"{len(carte.options)} options au lieu de {attendues}")
-        elif len({_normaliser(o) for o in carte.options}) != attendues:
-            ennuis.append("deux options identiques")
-        if not 0 <= carte.bonne < len(carte.options):
-            ennuis.append("bonne réponse hors bornes")
-        elif carte.forme is Forme.QCM and _trop_longue(carte):
-            # Un distracteur bâclé est court, la bonne réponse est soignée et
-            # longue : on répond juste sans lire le code. Le défaut est réel
-            # et se mesure.
-            ennuis.append("bonne réponse repérable à sa longueur")
+    attendues = 2 if carte.forme is Forme.VRAI_FAUX else 4
+    if len(carte.options) != attendues:
+        ennuis.append(f"{len(carte.options)} options au lieu de {attendues}")
+    elif len({_normaliser(o) for o in carte.options}) != attendues:
+        ennuis.append("deux options identiques")
 
-    elif carte.forme is Forme.REPERER:
-        if not 1 <= carte.bonne <= len(lignes):
-            ennuis.append("ligne à trouver hors de l'extrait")
-        if carte.ligne:
-            ennuis.append("la ligne visée est montrée alors qu'il faut la trouver")
+    if not 0 <= carte.bonne < len(carte.options):
+        ennuis.append("bonne réponse hors bornes")
+    elif carte.forme is Forme.QCM and _trop_longue(carte):
+        # Un distracteur bâclé est court, la bonne réponse est soignée et
+        # longue : on répond juste sans lire le code. Le défaut est réel
+        # et se mesure.
+        ennuis.append("bonne réponse repérable à sa longueur")
 
-    else:
-        if not carte.attendu and carte.notion is None:
-            ennuis.append("aucune réponse acceptée")
-        if not 1 <= carte.ligne <= len(lignes):
-            ennuis.append("ligne visée hors de l'extrait")
-
-    if carte.forme is Forme.NOMMER and carte.notion is None:
-        ennuis.append("carte « nommer » sans notion à nommer")
+    if not 1 <= carte.ligne <= len(lignes):
+        ennuis.append("ligne visée hors de l'extrait")
 
     return ennuis
 

@@ -38,8 +38,9 @@ type Ligne = {
   taille: number;
 };
 
-/* Chaque ligne est colorée à part et gardée séparément : une carte « repérer »
-   surligne une ligne, ce qu'un bloc d'un seul tenant ne permet pas. */
+/* Chaque ligne est colorée à part et gardée séparément : la carte surligne la
+   ligne sur laquelle elle interroge, ce qu'un bloc d'un seul tenant ne permet
+   pas. */
 function decouper(source: string): Ligne[] {
   let debut = 0;
   return source.split("\n").map((texte) => {
@@ -51,29 +52,25 @@ function decouper(source: string): Ligne[] {
 
 const LIGNES = decouper(SOURCE);
 
-type Commun = {
+type Carte = {
   /** La forme de la carte, telle qu'elle paraît au-dessus de la question. */
   forme: string;
   question: string;
+  options: string[];
   /** L'explication qui suit la réponse — juste ou fausse, elle vient
    *  toujours, et elle parle du code qu'on a sous les yeux. */
   pourquoi: string;
   juste: boolean;
-  /** Indices de la bonne réponse et de celle qui est jouée : une option pour
-   *  les unes, une ligne de l'extrait pour les autres. */
+  /** Rangs de la bonne option et de celle qui est jouée. */
   bonne: number;
   jouee: number;
+  /** La ligne de l'extrait sur laquelle porte la question, surlignée pendant
+   *  qu'on y répond. */
+  ligne: number;
 };
-
-type Carte =
-  | (Commun & { genre: "options"; options: string[] })
-  | (Commun & { genre: "lignes" });
-
-type CarteOptions = Extract<Carte, { genre: "options" }>;
 
 const CARTES: Carte[] = [
   {
-    genre: "options",
     forme: "QCM",
     question: "Au deuxième rendu, mot inchangé : que renvoie useMemo ?",
     options: [
@@ -85,30 +82,37 @@ const CARTES: Carte[] = [
     bonne: 1,
     jouee: 1,
     juste: true,
+    ligne: 3,
     pourquoi:
       "useMemo garde le tableau tant que elements et mot n'ont pas bougé. " +
       "C'est ce qui épargne un rendu à Liste : la même référence, pas une " +
       "copie identique.",
   },
   {
-    genre: "lignes",
-    forme: "Repérer",
-    question: "Quelle ligne empêche la minuterie de fuir ?",
-    bonne: 10,
-    jouee: 9,
+    forme: "QCM",
+    question: "À quoi sert ce que l'effet renvoie ?",
+    options: [
+      "À retirer la minuterie avant de rejouer",
+      "À donner sa valeur au prochain rendu",
+      "À signaler que l'effet a réussi",
+      "À remplacer le tableau de dépendances",
+    ],
+    bonne: 0,
+    jouee: 1,
     juste: false,
+    ligne: 10,
     pourquoi:
-      "La ligne 10 pose la minuterie, la 11 la retire. Sans ce retour, " +
-      "chaque changement de visibles en laisserait une derrière lui.",
+      "La ligne 9 pose la minuterie, la 10 la retire. Sans ce retour, chaque " +
+      "changement de visibles en laisserait une derrière lui.",
   },
   {
-    genre: "options",
     forme: "Vrai / faux",
     question: "L'effet se rejoue à chaque frappe dans le champ.",
     options: ["Vrai", "Faux"],
     bonne: 0,
     jouee: 0,
     juste: true,
+    ligne: 11,
     pourquoi:
       "mot change, donc useMemo recalcule, donc visibles est une nouvelle " +
       "référence, donc l'effet se rejoue. Les 300 ms sont là pour ça.",
@@ -203,18 +207,11 @@ export function DemoExercice() {
       tapesVus >= ligne.debut && tapesVus <= ligne.debut + ligne.taille,
   );
 
-  const teinteLigne = (index: number) => {
-    if (enCours.genre !== "lignes" || tempsVu === "code") return "";
-    /* Tant que rien n'est cliqué, les lignes s'éclairent au survol : c'est
-       toute la consigne de cette forme de carte. */
-    if (tempsVu === "enonce") return "hover:bg-panneau-clair/60";
-    if (tempsVu === "choix") {
-      return index === enCours.jouee ? "bg-accent/10" : "";
-    }
-    if (index === enCours.bonne) return "bg-menthe/15 text-encre";
-    if (index === enCours.jouee) return "bg-ambre/15";
-    return "";
-  };
+  /* La ligne dont il est question reste posée en fond tant que la carte est
+     à l'écran : c'est là que l'œil doit revenir en lisant l'explication, et
+     un cadre ou une flèche vaudrait désignation. */
+  const teinteLigne = (index: number) =>
+    tempsVu !== "code" && index === enCours.ligne ? "bg-accent/10" : "";
 
   return (
     <div
@@ -370,24 +367,16 @@ function CorpsCarte({ carte, numero, temps }: ProprietesCorps) {
         {carte.question}
       </p>
 
-      {carte.genre === "options" ? (
-        <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
-          {carte.options.map((option, index) => (
-            <li
-              key={option}
-              className={`rounded-lg border px-2.5 py-1.5 text-[0.78rem] transition-colors duration-300 ${teinteOption(carte, temps, index)}`}
-            >
-              {option}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-discret mt-3 font-mono text-[0.68rem]">
-          {temps === "enonce"
-            ? "Cliquez la ligne dans le code."
-            : `Ligne ${carte.jouee + 1}`}
-        </p>
-      )}
+      <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+        {carte.options.map((option, index) => (
+          <li
+            key={option}
+            className={`rounded-lg border px-2.5 py-1.5 text-[0.78rem] transition-colors duration-300 ${teinteOption(carte, temps, index)}`}
+          >
+            {option}
+          </li>
+        ))}
+      </ul>
 
       <Pourquoi carte={temps === "pourquoi" ? carte : undefined} />
     </>
@@ -427,7 +416,7 @@ function Pourquoi({ carte }: { carte?: Carte }) {
  *  s'allume dans tous les cas — on ne laisse jamais quelqu'un repartir avec
  *  sa fausse idée. */
 function teinteOption(
-  carte: CarteOptions,
+  carte: Carte,
   temps: Exclude<Temps, "code">,
   index: number,
 ): string {

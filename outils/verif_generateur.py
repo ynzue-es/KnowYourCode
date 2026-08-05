@@ -86,7 +86,6 @@ _CARTE_QCM = {
         "Une copie du dictionnaire de la signature",
     ],
     "bonne": 0,
-    "attendu": [],
     "explication": (
         "Le dictionnaire écrit dans la signature de charger_reglages est "
         "construit une seule fois, à la définition. Chaque appel qui omet "
@@ -95,16 +94,17 @@ _CARTE_QCM = {
     ),
 }
 
-_CARTE_REPERER = {
-    "forme": "reperer",
+_CARTE_REPLI = {
+    "forme": "qcm",
     "ligne": 7,
-    "question": (
-        "Quelle ligne remplace le résultat dès qu'il est vide, et pas "
-        "seulement absent ?"
-    ),
-    "options": [],
+    "question": "Que rend charger_reglages sur un fichier contenant `{}` ?",
+    "options": [
+        "Le dictionnaire defauts, par le repli",
+        "Un dictionnaire vide, tel qu'il est lu",
+        "None, faute de contenu exploitable",
+        "Une exception, car le JSON est jugé vide",
+    ],
     "bonne": 0,
-    "attendu": [],
     "explication": (
         "Le repli remplace le résultat de json.loads par defauts dès que "
         "celui-ci est faux au sens de Python. Un fichier qui contient un "
@@ -113,13 +113,12 @@ _CARTE_REPERER = {
     ),
 }
 
-_CARTE_NOMMER = {
-    "forme": "nommer",
+_CARTE_CONTEXTE = {
+    "forme": "vrai_faux",
     "ligne": 3,
-    "question": "Comment s'appelle ce que le mot-clé de la ligne 3 met en place ?",
-    "options": [],
-    "bonne": 0,
-    "attendu": ["gestionnaire de contexte", "context manager"],
+    "question": "Ligne 3 : fichier reste ouvert si la lecture lève.",
+    "options": ["Vrai", "Faux"],
+    "bonne": 1,
     "explication": (
         "Le bloc garantit que fichier est refermé à la sortie, y compris si "
         "la lecture lève. Sans lui, brut resterait à écrire pendant qu'un "
@@ -127,13 +126,17 @@ _CARTE_NOMMER = {
     ),
 }
 
-_CARTE_PREDIRE = {
-    "forme": "predire",
+_CARTE_ABSENT = {
+    "forme": "qcm",
     "ligne": 5,
     "question": "Que rend charger_reglages si le chemin n'existe pas ?",
-    "options": [],
+    "options": [
+        "Le dictionnaire defauts, sans bruit",
+        "None, puisque rien n'a été lu",
+        "Une chaîne vide venue de fichier.read",
+        "L'OSError, remontée à l'appelant",
+    ],
     "bonne": 0,
-    "attendu": ["defauts", "le dictionnaire par défaut"],
     "explication": (
         "La clause n'attrape que OSError : un chemin absent y tombe et "
         "charger_reglages rend defauts sans bruit. Une erreur de décodage, "
@@ -192,7 +195,7 @@ def _cache_neuf() -> CacheSeries:
 def verifier_lecture() -> None:
     """Une réponse bien formée donne des cartes utilisables."""
     generateur = _Bouchon(
-        _reponse(_CARTE_QCM, _CARTE_REPERER, _CARTE_NOMMER, _CARTE_PREDIRE)
+        _reponse(_CARTE_QCM, _CARTE_REPLI, _CARTE_CONTEXTE, _CARTE_ABSENT)
     )
     serie = generateur.fabriquer(_extrait())
 
@@ -211,28 +214,24 @@ def verifier_lecture() -> None:
     )
     _verifier(
         [carte.forme for carte in serie.cartes]
-        == [Forme.QCM, Forme.REPERER, Forme.NOMMER, Forme.PREDIRE],
+        == [Forme.QCM, Forme.QCM, Forme.VRAI_FAUX, Forme.QCM],
         "chaque carte garde la forme annoncée",
     )
 
-    qcm, a_reperer, a_nommer, a_predire = serie.cartes
+    qcm, repli, contexte, absent = serie.cartes
 
     _verifier(qcm.ligne == 1, "la carte est rattachée à la ligne qu'on a désignée")
     _verifier(
-        a_reperer.ligne == 0 and a_reperer.bonne == 7,
-        "la carte à repérer cache sa ligne et en fait la réponse attendue",
+        (repli.ligne, contexte.ligne, absent.ligne) == (7, 3, 5),
+        "chaque carte vise la ligne que le repérage lui a donnée",
     )
     _verifier(
-        a_nommer.notion == "gestionnaire de contexte",
-        "la notion du repère est reportée sur la carte à nommer",
+        contexte.notion == "gestionnaire de contexte",
+        "la notion du repère est reportée sur la carte",
     )
     _verifier(
-        (qcm.categorie, a_nommer.categorie) == ("robustesse", "langage"),
+        (qcm.categorie, contexte.categorie) == ("robustesse", "langage"),
         "la catégorie du repère est reportée sur la carte",
-    )
-    _verifier(
-        a_predire.attendu == ("defauts", "le dictionnaire par défaut"),
-        "les formulations acceptées sont conservées telles quelles",
     )
 
     _verifier(
@@ -240,17 +239,20 @@ def verifier_lecture() -> None:
         "le code est soumis avec ses numéros de ligne",
     )
     _verifier(
-        'la forme "nommer" y est interdite' in generateur.dernier_message
-        and "« gestionnaire de contexte »" in generateur.dernier_message,
-        "la consigne dit ligne par ligne si une notion est à faire nommer",
+        "« gestionnaire de contexte »" in generateur.dernier_message,
+        "la consigne nomme la notion que la ligne illustre",
+    )
+    _verifier(
+        "nommer" not in generateur.dernier_message.lower(),
+        "la consigne ne propose plus aucune forme à taper",
     )
 
 
 def verifier_douane() -> None:
     """Ce qui sort du modèle passe par `defauts`, et ce qui cloche est jeté."""
-    creuse = dict(_CARTE_NOMMER, explication=_EXPLICATION_CREUSE)
+    creuse = dict(_CARTE_CONTEXTE, explication=_EXPLICATION_CREUSE)
     serie = _Bouchon(
-        _reponse(_CARTE_QCM, _CARTE_REPERER, creuse, _CARTE_PREDIRE)
+        _reponse(_CARTE_QCM, _CARTE_REPLI, creuse, _CARTE_ABSENT)
     ).fabriquer(_extrait())
 
     _verifier(
@@ -264,23 +266,24 @@ def verifier_douane() -> None:
     )
 
     hors_sujet = dict(_CARTE_QCM, ligne=4)
-    serie = _Bouchon(_reponse(hors_sujet, _CARTE_REPERER)).fabriquer(_extrait())
+    serie = _Bouchon(_reponse(hors_sujet, _CARTE_REPLI)).fabriquer(_extrait())
     _verifier(
         serie is not None and len(serie.cartes) == 1,
         "une carte posée sur une ligne qu'on n'a pas désignée est jetée",
     )
 
-    # La ligne 1 n'a pas de notion : le repérage l'a dit, la carte ne peut donc
-    # pas demander de la nommer.
-    sans_notion = dict(_CARTE_QCM, forme="nommer", options=[], attendu=["mutable"])
-    serie = _Bouchon(_reponse(sans_notion, _CARTE_REPERER)).fabriquer(_extrait())
-    _verifier(
-        serie is not None and len(serie.cartes) == 1,
-        "une carte « nommer » sur une ligne sans notion est jetée",
-    )
+    # Les formes à taper ont été retirées : un modèle qui en renverrait une,
+    # parce qu'il a vu passer l'ancienne consigne, ne doit pas être servi.
+    for disparue in ("nommer", "predire", "reperer"):
+        rescapee = dict(_CARTE_QCM, forme=disparue)
+        serie = _Bouchon(_reponse(rescapee, _CARTE_REPLI)).fabriquer(_extrait())
+        _verifier(
+            serie is not None and len(serie.cartes) == 1,
+            f"une carte « {disparue} » n'est plus reconnue et disparaît",
+        )
 
     trois_options = dict(_CARTE_QCM, options=_CARTE_QCM["options"][:3])
-    serie = _Bouchon(_reponse(trois_options, _CARTE_REPERER)).fabriquer(_extrait())
+    serie = _Bouchon(_reponse(trois_options, _CARTE_REPLI)).fabriquer(_extrait())
     _verifier(
         serie is not None and len(serie.cartes) == 1,
         "un QCM à trois options est jeté",
@@ -322,7 +325,7 @@ def verifier_le_numero_de_ligne() -> None:
         (None, "rien du tout"),
     ):
         serie = _Bouchon(
-            _reponse(dict(_CARTE_QCM, ligne=valeur), _CARTE_REPERER)
+            _reponse(dict(_CARTE_QCM, ligne=valeur), _CARTE_REPLI)
         ).fabriquer(_extrait())
         _verifier(
             serie is not None and len(serie.cartes) == 1,
@@ -380,7 +383,7 @@ def verifier_cache() -> None:
     """Une série fabriquée une fois ne se repaie pas."""
     cache = _cache_neuf()
     generateur = _Bouchon(
-        _reponse(_CARTE_QCM, _CARTE_REPERER, _CARTE_NOMMER, _CARTE_PREDIRE),
+        _reponse(_CARTE_QCM, _CARTE_REPLI, _CARTE_CONTEXTE, _CARTE_ABSENT),
         cache=cache,
     )
     extrait = _extrait()
@@ -460,8 +463,12 @@ def verifier_factice() -> None:
         "toutes les cartes du factice passent la douane",
     )
     _verifier(
-        {carte.forme for carte in serie.cartes} >= {Forme.QCM, Forme.REPERER},
-        "le factice ne pose pas quatre fois la même forme",
+        {carte.forme for carte in serie.cartes} == {Forme.QCM, Forme.VRAI_FAUX},
+        "le factice pose les deux formes, et rien d'autre",
+    )
+    _verifier(
+        len({carte.ligne for carte in serie.cartes}) == len(serie.cartes),
+        "deux cartes du factice ne portent jamais sur la même ligne",
     )
     _verifier(
         all(len(carte.question) <= 160 for carte in serie.cartes),

@@ -144,6 +144,15 @@ def verifier_le_bareme() -> None:
     )
 
 
+def _depot_ecrit(maigre_seul: bool) -> Path:
+    """Un faux projet d'un ou deux fichiers, pour éprouver l'ordre du repli."""
+    dossier = Path(tempfile.mkdtemp(prefix="knowyourcode-depot-"))
+    (dossier / "maigre.py").write_text(_LEGERE, encoding="utf-8")
+    if not maigre_seul:
+        (dossier / "riche.py").write_text(_RICHE, encoding="utf-8")
+    return dossier
+
+
 def verifier_le_plancher_de_reperes() -> None:
     """Une carte n'est pas une série : les extraits trop pauvres sont écartés."""
     selecteur = SelecteurProjet()
@@ -168,18 +177,38 @@ def verifier_le_plancher_de_reperes() -> None:
         "le corpus de référence encadre bien le plancher",
     )
 
-    peses = selecteur._peser([maigre, riche])
+    riches, maigres = selecteur._peser([maigre, riche])
     _verifier(
-        [extrait.nom_fonction for extrait, _ in peses] == ["riche"],
-        "un extrait à repère unique est écarté quand il y a mieux",
+        [extrait.nom_fonction for extrait, _ in riches] == ["riche"],
+        "un extrait à repère unique n'est pas compté parmi ceux qui tiennent une série",
+    )
+    _verifier(
+        [extrait.nom_fonction for extrait, _ in maigres] == ["maigre"],
+        "il est mis de côté, pas jeté",
     )
 
     # Le repli compte autant que le plancher : un petit projet où rien n'est
     # riche doit encore poser une question, pas rester muet.
     _verifier(
-        [extrait.nom_fonction for extrait, _ in selecteur._peser([maigre])]
-        == ["maigre"],
+        selecteur.choisir([], _depot_ecrit(maigre_seul=True)) is not None,
         "faute de mieux, l'extrait pauvre est repris plutôt que rien",
+    )
+
+    # Une fois le neuf épuisé, revoir une bonne fonction vaut mieux que d'en
+    # découvrir une qui n'a qu'une carte à offrir. La riche est donc marquée
+    # comme déjà vue, la pauvre non : c'est la riche qui doit ressortir.
+    dossier = _depot_ecrit(maigre_seul=False)
+    recenses = {
+        e.nom_fonction: e.identifiant
+        for e in SelecteurProjet()._recenser(dossier)
+    }
+    tires = {
+        selecteur.choisir([recenses["charger"]], dossier).nom_fonction
+        for _ in range(20)
+    }
+    _verifier(
+        tires == {"charger"},
+        "le neuf pauvre ne passe pas devant la révision d'une bonne fonction",
     )
 
 

@@ -181,25 +181,21 @@ export default async function Accueil() {
         <Section
           id="questions"
           surtitre="Les questions"
-          titre="Cinq formes, un geste chacune"
+          titre="Deux formes, un clic chacune"
           chapeau={
             <p>
-              Rien à rédiger. La correction est locale : elle tombe à
+              Rien à taper. La correction est locale : elle tombe à
               l&apos;instant du clic, sans rien attendre du réseau.
             </p>
           }
         >
           <ul className="grid gap-4 sm:grid-cols-2">
-            <Forme nom="QCM">Que fait cette ligne ? Quatre options.</Forme>
-            <Forme nom="Repérer">
-              Quelle ligne empêche la fuite mémoire ? On clique la ligne.
+            <Forme nom="QCM">
+              Que fait cette ligne ? Quatre options, dont trois qu&apos;on
+              donnerait vraiment en lisant trop vite.
             </Forme>
-            <Forme nom="Prédire">
-              Ça vaut quoi au deuxième rendu ? Un mot.
-            </Forme>
-            <Forme nom="Vrai / faux">Deux secondes.</Forme>
-            <Forme nom="Nommer la notion">
-              Fermeture, décorateur, court-circuit, mémoïsation.
+            <Forme nom="Vrai / faux">
+              Une idée fausse répandue, tranchée en deux secondes.
             </Forme>
           </ul>
         </Section>

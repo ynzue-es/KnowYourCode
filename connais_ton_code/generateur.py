@@ -36,7 +36,14 @@ from .cartes import CARTES_PAR_SERIE, Carte, Forme, Serie, defauts
 # définition, faute de quoi il écrirait des explications qu'elle refuserait.
 from .cartes import _identifiants as _identifiants_du_code
 from .modeles import Extrait
-from .reperage import LANGAGE, ROBUSTESSE, SECURITE, Repere, reperer
+from .reperage import (
+    LANGAGE,
+    ROBUSTESSE,
+    SECURITE,
+    Repere,
+    reperer,
+    sujets_distincts,
+)
 from .stockage import dossier_donnees, ecrire_json, lire_json
 
 URL_MISTRAL = "https://api.mistral.ai/v1/chat/completions"
@@ -59,11 +66,10 @@ SERIES_GARDEES = 200
 ANCIENNETE_MAXIMALE_S = 30 * 24 * 3600
 
 _CONSIGNE = """Tu écris des cartes de révision sur un extrait de code que le \
-développeur a écrit lui-même. Il répond en un geste — un clic sur une option, \
-un clic sur une ligne, un mot tapé — puis il lit ton explication. Le partage \
-est celui-là, et il est l'inverse de l'habitude : sa réponse est courte, ton \
-explication est le morceau. N'écris jamais une question qui appelle un \
-paragraphe.
+développeur a écrit lui-même. Il répond d'un seul clic, puis il lit ton \
+explication. Le partage est celui-là, et il est l'inverse de l'habitude : sa \
+réponse est courte, ton explication est le morceau. N'écris jamais une \
+question qui appelle un paragraphe.
 
 Tu ne choisis pas tes sujets. On te donne des lignes, une par une, avec ce \
 qu'il y a à y voir. Tu écris une carte par ligne donnée, et rien d'autre : \
@@ -89,22 +95,22 @@ bibliothèque que tu n'y vois pas, pas de conseil général.
 
 Réponds uniquement par un objet JSON de la forme {"cartes": [...]}, une entrée \
 par ligne donnée, chacune avec :
-- "forme" : "qcm", "reperer", "predire", "vrai_faux" ou "nommer" ;
+- "forme" : "qcm" ou "vrai_faux" ;
 - "ligne" : le numéro de la ligne donnée, recopié tel quel ;
 - "question" : une seule phrase, 160 caractères au plus ;
 - "options" : quatre propositions pour "qcm", exactement ["Vrai", "Faux"] pour \
-"vrai_faux", une liste vide pour les autres formes ;
-- "bonne" : le rang de la bonne option en comptant à partir de 0, sinon 0 ;
-- "attendu" : pour "predire" et "nommer", les formulations acceptées de la \
-réponse tapée, le mot juste et ses variantes courantes ; liste vide ailleurs ;
+"vrai_faux" ;
+- "bonne" : le rang de la bonne option en comptant à partir de 0 ;
 - "explication" : 480 caractères au plus.
 
-La forme se déduit de la ligne. « reperer » quand la ligne se décrit sans se \
-nommer : la question dit ce qui s'y passe et l'utilisateur la cherche dans le \
-code, donc ne la cite pas et ne donne pas son numéro. « predire » quand la \
-ligne produit une valeur qui se donne en un mot. « nommer » seulement si on \
-t'a donné une notion pour cette ligne. « vrai_faux » pour une idée fausse \
-répandue. « qcm » partout ailleurs."""
+Il n'y a que ces deux formes, et rien ne se tape : tout se répond au clic. \
+« vrai_faux » quand la ligne dément une idée fausse répandue, et l'affirmation \
+doit alors être fausse aussi souvent que vraie. « qcm » partout ailleurs.
+
+Une série porte plusieurs lignes du même extrait. Chaque carte doit \
+interroger autre chose que les précédentes : si deux lignes te semblent poser \
+la même question, change d'angle sur la seconde — ce qu'elle produit, ce \
+qu'elle empêche, ce qui se passerait sans elle."""
 
 
 @runtime_checkable
@@ -287,12 +293,15 @@ class GenerateurMistral:
         self._cache = cache if cache is not None else CacheSeries()
 
     def fabriquer(self, extrait: Extrait) -> Serie | None:
-        reperes = reperer(extrait.code, extrait.langage)
+        reperes = sujets_distincts(
+            reperer(extrait.code, extrait.langage, extrait.chemin_fichier)
+        )
         if not reperes:
             return None
 
-        # Les repères arrivent triés, le plus lourd en tête : prendre les
-        # premiers, c'est poser les questions qui apprennent le plus.
+        # Les repères arrivent triés, le plus lourd en tête, et dédoublonnés
+        # par sujet : prendre les premiers, c'est poser les questions qui
+        # apprennent le plus sans en poser deux fois la même.
         retenus = reperes[:CARTES_PAR_SERIE]
 
         cle = cle_de_cache(extrait)
@@ -373,16 +382,14 @@ def _code_numerote(code: str) -> str:
 def _consignes(reperes: list[Repere]) -> str:
     morceaux: list[str] = []
     for repere in reperes:
-        if repere.notion is not None:
-            vocabulaire = (
-                f" La notion à faire nommer est « {repere.notion} » : "
-                'la forme "nommer" est permise sur cette ligne.'
-            )
-        else:
-            vocabulaire = (
-                " Aucune notion n'est attachée à cette ligne : "
-                'la forme "nommer" y est interdite.'
-            )
+        # La notion n'est plus à faire deviner, mais la nommer oriente la
+        # question vers ce qui se transporte hors du projet plutôt que vers la
+        # paraphrase de la ligne.
+        vocabulaire = (
+            f" Cette ligne illustre la notion de « {repere.notion} »."
+            if repere.notion is not None
+            else ""
+        )
         morceaux.append(
             f"- ligne {repere.ligne} ({repere.categorie}) : "
             f"{repere.intitule}.{vocabulaire}"
@@ -396,10 +403,7 @@ def _consignes(reperes: list[Repere]) -> str:
 
 _FORMES: dict[str, Forme] = {
     "qcm": Forme.QCM,
-    "reperer": Forme.REPERER,
-    "predire": Forme.PREDIRE,
     "vrai_faux": Forme.VRAI_FAUX,
-    "nommer": Forme.NOMMER,
 }
 
 
@@ -456,14 +460,9 @@ def _en_carte(brute: Any, par_ligne: dict[int, Repere]) -> Carte | None:
         forme=forme,
         question=str(brute.get("question", "")).strip(),
         explication=str(brute.get("explication", "")).strip(),
-        # Sur une carte « reperer », surligner la ligne donnerait la réponse :
-        # elle passe du côté de ce qu'on demande de trouver.
-        ligne=0 if forme is Forme.REPERER else repere.ligne,
+        ligne=repere.ligne,
         options=_textes(brute.get("options")),
-        bonne=(
-            repere.ligne if forme is Forme.REPERER else _entier(brute.get("bonne"))
-        ),
-        attendu=_textes(brute.get("attendu")),
+        bonne=_entier(brute.get("bonne")),
         categorie=repere.categorie,
         notion=repere.notion,
     )
@@ -516,7 +515,6 @@ def _vers_json(carte: Carte) -> dict[str, Any]:
         "ligne": carte.ligne,
         "options": list(carte.options),
         "bonne": carte.bonne,
-        "attendu": list(carte.attendu),
         "categorie": carte.categorie,
         "notion": carte.notion,
     }
@@ -548,7 +546,6 @@ def _depuis_json(brutes: Any) -> tuple[Carte, ...]:
                 ligne=_entier(brute.get("ligne")),
                 options=_textes(brute.get("options")),
                 bonne=_entier(brute.get("bonne")),
-                attendu=_textes(brute.get("attendu")),
                 categorie=str(brute.get("categorie", LANGAGE)),
                 notion=str(notion) if notion else None,
             )
@@ -581,7 +578,9 @@ class GenerateurFactice:
     """
 
     def fabriquer(self, extrait: Extrait) -> Serie | None:
-        reperes = reperer(extrait.code, extrait.langage)
+        reperes = sujets_distincts(
+            reperer(extrait.code, extrait.langage, extrait.chemin_fichier)
+        )
         if not reperes:
             return None
 
@@ -618,30 +617,6 @@ def _carte_factice(rang: int, repere: Repere, code: str) -> Carte | None:
                 ),
                 len(_CATEGORIES) - 1,
             ),
-            categorie=repere.categorie,
-            notion=repere.notion,
-        )
-
-    if rang == 1:
-        return Carte(
-            forme=Forme.REPERER,
-            question=(
-                "Sur quelle ligne trouve-t-on ceci : "
-                f"{_ecourter(repere.intitule, 120)} ?"
-            ),
-            explication=explication,
-            bonne=repere.ligne,
-            categorie=repere.categorie,
-            notion=repere.notion,
-        )
-
-    if repere.notion is not None:
-        return Carte(
-            forme=Forme.NOMMER,
-            question=f"Comment s'appelle ce que fait la ligne {repere.ligne} ?",
-            explication=explication,
-            ligne=repere.ligne,
-            attendu=(repere.notion,),
             categorie=repere.categorie,
             notion=repere.notion,
         )

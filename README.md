@@ -7,8 +7,8 @@ Clin d'œil au KYC bancaire : connaître son code plutôt que son client.
 Un utilitaire de barre de menus pour macOS. Quand vous avez un moment, vous
 ouvrez son panneau : il tire au hasard une fonction du projet sur lequel vous
 travaillez avec Claude Code, et pose dessus une série de trois ou quatre
-cartes rapides. QCM, ligne à repérer d'un clic, valeur à prédire, vrai ou
-faux, notion à nommer — un geste chacune, rien à rédiger.
+cartes rapides. QCM à quatre options ou vrai ou faux : un clic chacune, rien
+à taper.
 
 Vous répondez court, l'application explique long : après chaque réponse,
 juste ou fausse, vient un texte qui dit pourquoi ce code est écrit comme ça,
@@ -18,7 +18,9 @@ Le but n'est pas de noter, c'est de garder la maîtrise d'un code qu'on ne
 relit plus, et de s'entraîner au passage sur Python et TypeScript. Des
 questions simples, tous les jours, et une série de jours consécutifs.
 
-Rien ne s'ouvre tout seul, jamais. C'est vous qui décidez du moment.
+Rien ne s'ouvre tout seul, sauf si vous le demandez : un réglage éteint par
+défaut ouvre le panneau à l'instant où vous envoyez un prompt à Claude Code,
+c'est-à-dire au moment où vous alliez attendre.
 
 ## Installation
 
@@ -155,9 +157,9 @@ ni de clé, ni d'une session Claude Code en cours.
 3. **Fabrication** — un indicateur d'attente, le temps que les cartes
    reviennent ; le panneau reste utilisable. C'est la seule attente réseau du
    cycle.
-4. **Carte** — le chemin du fichier, le nom de la fonction, le code coloré, la
-   question et ce qu'on peut y répondre : une option, une ligne, un mot. Et un
-   bouton Passer.
+4. **Carte** — le chemin du fichier, le nom de la fonction, le code coloré avec
+   la ligne en question surlignée, et les options à cliquer. Et un bouton
+   Passer.
 5. **Explication** — la correction et le texte qui dit pourquoi, puis un bouton
    Suivant jusqu'à la dernière carte de la série.
 

@@ -8,7 +8,7 @@ from typing import Iterable, Protocol, runtime_checkable
 
 from .extraction import LANGAGES, fonctions
 from .modeles import Extrait
-from .reperage import Repere, reperer
+from .reperage import Repere, reperer, sujets_distincts
 
 # Trop courte, il n'y a rien à expliquer ; trop longue, on ne relit pas.
 LIGNES_MIN = 4
@@ -145,10 +145,20 @@ class SelecteurProjet:
 
         vus = set(deja_vus)
         jamais_vus = [e for e in candidats if e.identifiant not in vus]
-        # Une fois tout le projet parcouru, mieux vaut réviser que se taire.
-        # Le repli joue aussi quand le neuf ne donne rien de repérable : mieux
-        # vaut reposer une bonne fonction que d'en servir une vide.
-        retenus = self._peser(jamais_vus) or self._peser(candidats)
+
+        # L'ordre de préférence, et il compte plus qu'il n'en a l'air : du neuf
+        # qui tient une série, puis une révision qui en tient une, et seulement
+        # ensuite ce qui n'a qu'une carte à offrir. Servir le neuf d'abord quoi
+        # qu'il arrive revenait, une fois le projet parcouru, à enchaîner les
+        # séries d'une seule question alors que de bonnes fonctions attendaient
+        # d'être revues.
+        riches, maigres = self._peser(jamais_vus)
+        if not riches:
+            riches_revus, maigres_revus = self._peser(candidats)
+            riches = riches_revus
+            maigres = maigres or maigres_revus
+
+        retenus = riches or maigres
         if not retenus:
             return None
 
@@ -156,8 +166,14 @@ class SelecteurProjet:
         poids = [poids for _, poids in retenus]
         return random.choices(extraits, weights=poids)[0]
 
-    def _peser(self, candidats: list[Extrait]) -> list[tuple[Extrait, int]]:
-        """Analyse un échantillon des candidats et pèse ceux qui sont repérés.
+    def _peser(
+        self, candidats: list[Extrait]
+    ) -> tuple[list[tuple[Extrait, int]], list[tuple[Extrait, int]]]:
+        """Pèse un échantillon des candidats, en séparant les riches des maigres.
+
+        Deux listes plutôt qu'une : l'appelant a besoin de savoir lesquels
+        tiennent une série entière, pour ne se rabattre sur les autres qu'après
+        avoir épuisé toutes les bonnes fonctions, revues comprises.
 
         Le mélange n'est pas une coquetterie : c'est lui qui fait que
         l'échantillon change à chaque ouverture. La pondération ne joue qu'à
@@ -170,7 +186,12 @@ class SelecteurProjet:
         retenus: list[tuple[Extrait, int]] = []
         maigres: list[tuple[Extrait, int]] = []
         for extrait in echantillon[:ANALYSES_MAX]:
-            reperes = reperer(extrait.code, extrait.langage)
+            # Les sujets, pas les lignes : un extrait qui répète quatre fois le
+            # même motif n'a qu'une question à offrir, et le plancher doit le
+            # voir comme tel.
+            reperes = sujets_distincts(
+                reperer(extrait.code, extrait.langage, extrait.chemin_fichier)
+            )
             if not reperes:
                 continue
             if len(reperes) < REPERES_MIN:
@@ -180,9 +201,7 @@ class SelecteurProjet:
             if len(retenus) >= RETENUS_ASSEZ:
                 break
 
-        # Un petit projet peut n'avoir que des fonctions à repère unique. Une
-        # seule carte vaut mieux qu'une fenêtre vide, mais en dernier recours.
-        return retenus or maigres
+        return retenus, maigres
 
     def _recenser(self, dossier: Path) -> list[Extrait]:
         extraits: list[Extrait] = []

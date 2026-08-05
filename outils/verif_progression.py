@@ -412,14 +412,16 @@ def verifier_ancien_fichier() -> None:
             code="def filtrer():\n    return []\n",
         ),
         Carte(
-            forme=Forme.NOMMER,
-            question="Comment s'appelle ce que fait cette ligne ?",
+            forme=Forme.VRAI_FAUX,
+            question="Ligne 2 : `filtrer` rend toujours la même liste.",
             explication="`filtrer` rend une liste.",
             ligne=2,
+            options=("Vrai", "Faux"),
+            bonne=1,
             notion="fermeture",
             categorie=LANGAGE,
         ),
-        Correction(juste=True, bonne_reponse="fermeture", explication="…"),
+        Correction(juste=True, bonne_reponse="Faux", explication="…"),
     )
 
     relues = Historique(chemin=chemin).entrees()
@@ -447,14 +449,16 @@ def verifier_ecriture() -> None:
     historique.enregistrer_carte(
         extrait,
         Carte(
-            forme=Forme.REPERER,
-            question="Quelle ligne construit la liste ?",
+            forme=Forme.QCM,
+            question="Ligne 2 : que construit cette expression ?",
             explication="La compréhension de `elements`.",
-            bonne=2,
+            ligne=2,
+            options=("Une liste neuve", "Un générateur", "Un tuple", "Un ensemble"),
+            bonne=0,
             categorie=LANGAGE,
             notion="compréhension",
         ),
-        Correction(juste=False, bonne_reponse="ligne 2", explication="…"),
+        Correction(juste=False, bonne_reponse="Une liste neuve", explication="…"),
     )
     historique.enregistrer_passage(extrait)
 
@@ -465,7 +469,7 @@ def verifier_ecriture() -> None:
     )
     _verifier(
         lues[0].ligne == 2,
-        "pour une carte « repérer », c'est la ligne à trouver qui est enregistrée",
+        "la ligne sur laquelle portait la carte est enregistrée",
     )
     _verifier(
         not lues[0].juste and lues[0].notion == "compréhension",
