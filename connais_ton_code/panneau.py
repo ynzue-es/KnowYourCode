@@ -91,6 +91,7 @@ ECART_SOUS_LA_BARRE = 6
 # rangées et leur écart en demandent donc 80.
 HAUTEUR_BOUTON_OPTION = 36
 ECART_OPTIONS = 8
+ECART_OPTIONS_HORIZONTAL = 14
 HAUTEUR_ZONE_OPTIONS = 2 * HAUTEUR_BOUTON_OPTION + ECART_OPTIONS
 
 HAUTEUR_ZONE_REPOS = 70
@@ -283,6 +284,24 @@ class ZoneCode(TextEdit):
         return selection
 
 
+# L'épaisseur de la bande, en haut de l'écran, où peut vivre une icône de barre
+# de menus. Large : la barre grossit avec l'encoche des portables récents.
+BANDE_BARRE_DE_MENUS = 80
+
+
+def _ancrage_credible(zone_icone: QRect) -> bool:
+    """Dit si cette position peut être celle d'une icône de barre de menus."""
+    if zone_icone.isEmpty():
+        return False
+
+    ecran = QGuiApplication.screenAt(zone_icone.center())
+    if ecran is None:
+        return False
+
+    haut = ecran.geometry().top()
+    return haut <= zone_icone.top() <= haut + BANDE_BARRE_DE_MENUS
+
+
 class Panneau(QWidget):
     """Le panneau qui pose les cartes et recueille les gestes de réponse."""
 
@@ -441,7 +460,11 @@ class Panneau(QWidget):
         self._zone_options.setFixedHeight(HAUTEUR_ZONE_OPTIONS)
         self._grille_options = QGridLayout(self._zone_options)
         self._grille_options.setContentsMargins(0, 0, 0, 0)
-        self._grille_options.setSpacing(ECART_OPTIONS)
+        # L'écart horizontal est le plus large des deux : côte à côte, deux
+        # libellés séparés de huit pixels seulement se lisent comme une seule
+        # phrase, alors que l'un est la bonne réponse et l'autre un leurre.
+        self._grille_options.setHorizontalSpacing(ECART_OPTIONS_HORIZONTAL)
+        self._grille_options.setVerticalSpacing(ECART_OPTIONS)
         return self._zone_options
 
     def _construire_page_correction(self) -> QWidget:
@@ -543,12 +566,21 @@ class Panneau(QWidget):
     def ancrer(self, zone_icone: QRect) -> None:
         """Retient la position de l'icône, sous laquelle s'ouvrir.
 
-        Une icône qui vient d'être créée annonce une position aberrante,
-        du genre `QRect(0, 1440, 38, 0)`, le temps que le système la place
+        Une icône qui vient d'être créée annonce une position aberrante, du
+        genre `QRect(0, 1440, 38, 0)`, le temps que le système la place
         vraiment. Elle n'est pas nulle pour autant : c'est sa hauteur qu'il
-        faut regarder, sinon le panneau s'ouvre hors de l'écran.
+        faut regarder.
+
+        Et surtout, macOS ne répond pas la même chose selon que l'application
+        est au premier plan ou non. Un clic sur l'icône donne toujours une
+        position juste ; l'ouverture automatique, elle, arrive pendant qu'on
+        est ailleurs, et la position rendue peut alors être celle d'avant,
+        voire d'un écran qu'on a débranché. On ne retient donc que ce qui
+        ressemble vraiment à une icône de barre de menus : sur un écran connu,
+        et collée à son bord haut. Le reste est ignoré, et le dernier ancrage
+        valable continue de servir.
         """
-        if not zone_icone.isEmpty():
+        if _ancrage_credible(zone_icone):
             self._zone_ancrage = zone_icone
 
     def repositionner(self) -> None:

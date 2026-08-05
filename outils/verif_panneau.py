@@ -33,11 +33,15 @@ DOSSIER_TEST = tempfile.mkdtemp(prefix="knowyourcode-verif-panneau-")
 os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 
 from PyQt6.QtCore import QRect, Qt, QTimer  # noqa: E402
-from PyQt6.QtGui import QGuiApplication  # noqa: E402
+from PyQt6.QtGui import QFont, QFontInfo, QGuiApplication  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from connais_ton_code.apparence import appliquer_theme_sombre  # noqa: E402
+from connais_ton_code.apparence import (  # noqa: E402
+    appliquer_theme_sombre,
+    enregistrer_police_du_code,
+)
+from connais_ton_code.coloration import POLICE_CODE  # noqa: E402
 from connais_ton_code.application import (  # noqa: E402
     _autoriser_ctrl_c,
     _mode_barre_de_menus,
@@ -55,6 +59,7 @@ from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import Extrait  # noqa: E402
 from connais_ton_code.orchestrateur import Orchestrateur  # noqa: E402
 from connais_ton_code.panneau import (  # noqa: E402
+    ECART_OPTIONS_HORIZONTAL,
     HAUTEUR_BILAN,
     HAUTEUR_BOUTON_OPTION,
     HAUTEUR_CORRECTION,
@@ -228,11 +233,19 @@ def _mauvaise_option(carte: Carte) -> str:
 
 
 def _cliquer_option(panneau: Panneau, texte: str) -> bool:
-    """Clique vraiment le bouton, comme le ferait la main."""
+    """Clique vraiment le bouton, comme le ferait la main.
+
+    Un bouton pas encore disposé mesure zéro : le clic tombe alors à côté sans
+    que rien ne le signale, et c'est le constat suivant qui échoue, très loin
+    de la cause. On refuse plutôt de faire semblant.
+    """
     for bouton in panneau._boutons_options:
-        if bouton.text() == texte:
-            QTest.mouseClick(bouton, Qt.MouseButton.LeftButton)
-            return True
+        if bouton.text() != texte:
+            continue
+        if not bouton.isVisible() or bouton.rect().isEmpty():
+            return False
+        QTest.mouseClick(bouton, Qt.MouseButton.LeftButton)
+        return True
     return False
 
 
@@ -322,6 +335,22 @@ def main() -> int:
                 for second in cadres[i + 1 :]
             ),
             f"carte {numero} ({marque}) : deux propositions ne se touchent pas",
+        )
+        # Côte à côte, deux libellés trop proches se lisent comme une seule
+        # phrase : l'écart horizontal se vérifie à part du vertical.
+        voisins = [
+            (premier, second)
+            for premier in cadres
+            for second in cadres
+            if premier.top() == second.top() and premier.left() < second.left()
+        ]
+        _verifier(
+            all(
+                second.left() - premier.right() - 1 >= ECART_OPTIONS_HORIZONTAL
+                for premier, second in voisins
+            ),
+            f"carte {numero} ({marque}) : les propositions d'une même rangée "
+            f"gardent {ECART_OPTIONS_HORIZONTAL} pixels entre elles",
         )
 
         if numero == 1 and juste:
@@ -552,6 +581,67 @@ def main() -> int:
             )
         panneau._zone_ecran = vrai_zone_ecran
 
+    def ancrage() -> None:
+        """L'ancrage ne doit retenir que ce qui ressemble à l'icône.
+
+        macOS ne rend pas la même position selon que l'application est au
+        premier plan ou non : un clic sur l'icône donne toujours le bon
+        rectangle, l'ouverture automatique arrive pendant qu'on est ailleurs
+        et peut recevoir une position d'un autre temps. Le dernier ancrage
+        valable doit alors continuer de servir plutôt qu'être remplacé.
+        """
+        zone = QGuiApplication.primaryScreen().geometry()
+        bon = QRect(zone.center().x(), zone.top() + 2, 24, 22)
+        panneau.ancrer(bon)
+        _verifier(
+            panneau._zone_ancrage == bon,
+            "une position d'icône plausible est retenue",
+        )
+
+        for description, aberrante in (
+            ("de hauteur nulle", QRect(zone.center().x(), zone.top(), 38, 0)),
+            ("hors de tout écran", QRect(-9000, -9000, 24, 22)),
+            (
+                "au milieu de l'écran",
+                QRect(zone.center().x(), zone.center().y(), 24, 22),
+            ),
+            (
+                "sous la barre de menus",
+                QRect(zone.center().x(), zone.top() + 400, 24, 22),
+            ),
+        ):
+            panneau.ancrer(aberrante)
+            _verifier(
+                panneau._zone_ancrage == bon,
+                f"une position {description} est ignorée, l'ancrage tient",
+            )
+
+    def polices() -> None:
+        """Le code doit se lire dans la monospace d'Apple, pas dans un repli."""
+        familles = enregistrer_police_du_code()
+        _verifier(
+            bool(familles),
+            f"SF Mono est déclarée à Qt ({', '.join(familles) or 'aucune'})",
+        )
+        _verifier(
+            all(
+                nom.strip().strip("'") in POLICE_CODE
+                or nom.strip() in POLICE_CODE
+                for nom in familles
+            ),
+            "les familles obtenues figurent bien dans la pile du code",
+        )
+
+        # Ce qui compte n'est pas le nom demandé mais celui qui sort : Qt se
+        # rabat en silence, et un repli invisible rendrait ce contrôle creux.
+        police = QFont(POLICE_CODE.split(",")[0])
+        police.setPixelSize(13)
+        _verifier(
+            QFontInfo(police).fixedPitch(),
+            f"la police obtenue pour le code est bien à chasse fixe "
+            f"({QFontInfo(police).family()})",
+        )
+
     def _reveiller() -> None:
         """Fait comme si un prompt venait de partir vers Claude Code."""
         orchestrateur._guetteur_prompts = GuetteurFige()
@@ -637,6 +727,8 @@ def main() -> int:
     etapes += [
         transitions_interdites,
         fermeture,
+        polices,
+        ancrage,
         placement,
         desaccord,
         desaccord_suite,
