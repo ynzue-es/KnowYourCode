@@ -10,13 +10,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
+from pathlib import Path
+
+from PyQt6.QtCore import QObject, QThreadPool, QTimer, pyqtSignal
 
 from .barre_menu import BarreMenu
 from .cartes import Carte, Correction, Serie, corriger
 from .etats import Etat, transition_valide
 from .historique import Historique
-from . import rappel
+from . import rappel, reveil
 from .fenetre_principale import FenetrePrincipale
 from .modeles import Extrait
 from .panneau import Panneau
@@ -42,6 +44,14 @@ MESSAGE_PREPARATION = "Je prépare les questions…"
 # précédents ont échoué.
 ECHECS_AVANT_DE_SE_TAIRE = 3
 MESSAGE_ABANDON = "Série laissée de côté. Une autre quand vous voulez."
+
+
+def _date_de_fichier(chemin: Path) -> float:
+    """La date de dernière écriture, ou zéro si le fichier n'est pas là."""
+    try:
+        return chemin.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _commentaire_de_bilan(justes: int, total: int) -> str:
@@ -100,6 +110,7 @@ class Orchestrateur(QObject):
         self._echecs_de_suite = 0
 
         self._brancher()
+        self._guetter_le_reveil()
 
     # ------------------------------------------------------------------
     # Cycle de vie
@@ -116,6 +127,7 @@ class Orchestrateur(QObject):
         self._panneau.fenetre_demandee.connect(self.afficher_fenetre)
         self._panneau.fermeture_demandee.connect(self.fermer)
         self._fenetre.rappel_change.connect(self._sur_rappel)
+        self._fenetre.reveil_change.connect(self._sur_reveil)
         self._panneau.masque.connect(self._sur_masque)
 
         self._barre.ouverture_demandee.connect(self.ouvrir)
@@ -128,6 +140,53 @@ class Orchestrateur(QObject):
         if not transition_valide(self._etat, etat):
             raise RuntimeError(f"Transition interdite : {self._etat} → {etat}")
         self._etat = etat
+
+    # ------------------------------------------------------------------
+    # Le réveil
+    # ------------------------------------------------------------------
+
+    def _guetter_le_reveil(self) -> None:
+        """Surveille le fichier que le hook de Claude Code vient toucher.
+
+        Un `stat` toutes les deux secondes plutôt qu'une surveillance du
+        système de fichiers : le fichier est créé, remplacé, parfois effacé
+        avec le dossier de données, et un observateur posé sur un chemin qui
+        n'existe pas encore ne se réarme pas tout seul.
+
+        La date de départ est celle du fichier au lancement : sans elle, un
+        réveil vieux de trois jours ouvrirait une série au démarrage.
+        """
+        self._date_du_reveil = _date_de_fichier(reveil.chemin_reveil())
+        self._guetteur = QTimer(self)
+        self._guetteur.setInterval(2000)
+        self._guetteur.timeout.connect(self._sur_guet)
+        self._guetteur.start()
+
+    def _sur_guet(self) -> None:
+        date = _date_de_fichier(reveil.chemin_reveil())
+        if date <= self._date_du_reveil:
+            return
+        self._date_du_reveil = date
+
+        # Le réglage peut être éteint : dans ce cas plus personne ne touche le
+        # fichier, et ce chemin n'est jamais emprunté. On ne relit donc pas
+        # les réglages ici, ce serait payer une lecture toutes les deux
+        # secondes pour une information qui ne sert qu'une fois.
+        if self._etat is not Etat.FERME:
+            return
+        if calculer_statistiques(self._historique.entrees()).faite_aujourdhui:
+            # La série du jour est faite : on a assez demandé. Le compteur de
+            # jours est tenu, le reste serait du harcèlement.
+            return
+
+        self.ouvrir()
+        self.poser_question()
+
+    def _sur_reveil(self, installe: bool) -> None:
+        """Pose ou retire le hook dans les réglages de Claude Code."""
+        reussi = reveil.installer() if installe else reveil.retirer()
+        if not reussi:
+            self._fenetre.definir_reveil(reveil.est_installe())
 
     def _sur_rappel(self, installe: bool) -> None:
         """Pose ou retire le rappel dans les réglages de Claude Code.
@@ -278,6 +337,7 @@ class Orchestrateur(QObject):
         lui faire perdre.
         """
         self._fenetre.definir_rappel(rappel.est_installe())
+        self._fenetre.definir_reveil(reveil.est_installe())
         self._fenetre.afficher(calculer_statistiques(self._historique.entrees()))
 
     # ------------------------------------------------------------------

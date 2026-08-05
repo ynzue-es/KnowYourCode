@@ -50,6 +50,7 @@ class FenetrePrincipale(QWidget):
     """Progression et réglages, dans une fenêtre classique."""
 
     rappel_change = pyqtSignal(bool)
+    reveil_change = pyqtSignal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -160,6 +161,33 @@ class FenetrePrincipale(QWidget):
             note.setWordWrap(True)
             colonne.addWidget(note)
 
+        colonne.addSpacing(18)
+        colonne.addWidget(StrongBodyLabel("Ouverture automatique", page))
+
+        explication_reveil = BodyLabel(
+            "Ouvre le panneau quand vous envoyez un prompt à Claude Code, "
+            "c'est-à-dire au moment où vous alliez attendre. Rien ne s'ouvre "
+            "si la série du jour est déjà faite.",
+            page,
+        )
+        explication_reveil.setWordWrap(True)
+        colonne.addWidget(explication_reveil)
+
+        self._interrupteur_reveil = SwitchButton(page)
+        self._interrupteur_reveil.setOnText("S'ouvre avec Claude Code")
+        self._interrupteur_reveil.setOffText("S'ouvre sur demande")
+        self._interrupteur_reveil.checkedChanged.connect(self.reveil_change.emit)
+        colonne.addWidget(self._interrupteur_reveil)
+
+        note_reveil = CaptionLabel(
+            "Pose un hook dans ~/.claude/settings.json, qui vaut pour toutes "
+            "vos sessions. Redémarrez Claude Code après l'avoir changé.",
+            page,
+        )
+        note_reveil.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
+        note_reveil.setWordWrap(True)
+        colonne.addWidget(note_reveil)
+
         colonne.addStretch(1)
         return page
 
@@ -201,6 +229,12 @@ class FenetrePrincipale(QWidget):
         self._interrupteur.blockSignals(True)
         self._interrupteur.setChecked(installe)
         self._interrupteur.blockSignals(False)
+
+    def definir_reveil(self, installe: bool) -> None:
+        """Aligne l'interrupteur d'ouverture automatique sur le fichier de hooks."""
+        self._interrupteur_reveil.blockSignals(True)
+        self._interrupteur_reveil.setChecked(installe)
+        self._interrupteur_reveil.blockSignals(False)
 
     def _centrer(self) -> None:
         ecran = QGuiApplication.primaryScreen()

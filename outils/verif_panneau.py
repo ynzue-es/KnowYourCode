@@ -159,6 +159,12 @@ CARTES: tuple[Carte, ...] = (
 
 TOTAL = len(CARTES)
 
+# La cadence des étapes, et le nombre de fois qu'on redemande l'ouverture avant
+# de renoncer : macOS met parfois près d'une seconde à donner le focus à une
+# application accessoire, surtout quand une autre vient de se fermer.
+CADENCE_MS = 180
+ESSAIS_MAX = 25
+
 
 class GenerateurFige:
     """Rend toujours la même série, quel que soit l'extrait reçu.
@@ -460,6 +466,8 @@ def main() -> int:
         )
         application.quit()
 
+    # `demarrage` reste hors de l'enchaînement : c'est lui qui ouvre, et son
+    # constat porte justement sur l'état d'avant l'ouverture.
     etapes = [demarrage, repos_initial]
     for juste in (True, False):
         for numero in range(1, TOTAL + 1):
@@ -468,11 +476,39 @@ def main() -> int:
         etapes.append(partial(bilan, juste))
     etapes += [transitions_interdites, fermeture, fin]
 
-    # Une cadence régulière plutôt que des délais choisis un par un : les
-    # étapes se ressemblent toutes, et la liste reste lisible quand la série
-    # s'allonge.
-    for rang, etape in enumerate(etapes):
-        QTimer.singleShot(500 + rang * 180, etape)
+    # Les étapes s'enchaînent, elles ne se minutent pas. Programmées d'avance
+    # sur une horloge absolue, elles tombaient sur une fenêtre pas encore
+    # affichée quand le démarrage traînait — ce qui arrive juste après une
+    # autre application Qt — et les gestes n'atteignaient rien, sans qu'aucun
+    # constat n'échoue pour autant. Un contrôle dont le résultat dépend de ce
+    # qui a tourné avant ne garantit rien.
+    reste = list(etapes)
+
+    def enchainer() -> None:
+        if not reste:
+            return
+        reste.pop(0)()
+        if reste:
+            QTimer.singleShot(CADENCE_MS, enchainer)
+
+    def demarrer() -> None:
+        """Attend que la fenêtre existe vraiment avant de jouer le scénario."""
+        if not panneau.isVisible() and demarrer.essais < ESSAIS_MAX:
+            demarrer.essais += 1
+            orchestrateur.ouvrir()
+            QTimer.singleShot(CADENCE_MS, demarrer)
+            return
+        enchainer()
+
+    demarrer.essais = 0
+
+    # Le premier constat exige le panneau fermé : on le vérifie avant d'ouvrir
+    # quoi que ce soit, puis on laisse la fenêtre se poser.
+    QTimer.singleShot(300, reste.pop(0))
+    QTimer.singleShot(600, demarrer)
+    # Un filet : si le scénario se bloque, le script doit rendre la main. Les
+    # constats manquants feront échouer le compte.
+    QTimer.singleShot(60_000, application.quit)
 
     application.exec()
 
