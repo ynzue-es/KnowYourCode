@@ -32,16 +32,11 @@ if str(RACINE) not in sys.path:
 DOSSIER_TEST = tempfile.mkdtemp(prefix="knowyourcode-verif-panneau-")
 os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 
-from PyQt6.QtCore import QRect, Qt, QTimer  # noqa: E402
-from PyQt6.QtGui import QFont, QFontInfo, QGuiApplication  # noqa: E402
+from PyQt6.QtCore import Qt, QTimer  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from connais_ton_code.apparence import (  # noqa: E402
-    appliquer_theme_sombre,
-    enregistrer_police_du_code,
-)
-from connais_ton_code.coloration import POLICE_CODE  # noqa: E402
+from connais_ton_code.apparence import appliquer_theme_sombre  # noqa: E402
 from connais_ton_code.application import (  # noqa: E402
     _autoriser_ctrl_c,
     _mode_barre_de_menus,
@@ -58,17 +53,7 @@ from connais_ton_code.fenetre_principale import FenetrePrincipale  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import Extrait  # noqa: E402
 from connais_ton_code.orchestrateur import Orchestrateur  # noqa: E402
-from connais_ton_code.panneau import (  # noqa: E402
-    ECART_OPTIONS_HORIZONTAL,
-    HAUTEUR_BILAN,
-    HAUTEUR_BOUTON_OPTION,
-    HAUTEUR_CORRECTION,
-    HAUTEUR_MANCHE,
-    HAUTEUR_MINIMALE,
-    HAUTEUR_REPOS,
-    LARGEUR,
-    Panneau,
-)
+from connais_ton_code.panneau import Panneau  # noqa: E402
 from connais_ton_code.projet import ProjetFactice  # noqa: E402
 from connais_ton_code.selecteur import SelecteurFactice  # noqa: E402
 
@@ -233,19 +218,11 @@ def _mauvaise_option(carte: Carte) -> str:
 
 
 def _cliquer_option(panneau: Panneau, texte: str) -> bool:
-    """Clique vraiment le bouton, comme le ferait la main.
-
-    Un bouton pas encore disposé mesure zéro : le clic tombe alors à côté sans
-    que rien ne le signale, et c'est le constat suivant qui échoue, très loin
-    de la cause. On refuse plutôt de faire semblant.
-    """
+    """Clique vraiment le bouton, comme le ferait la main."""
     for bouton in panneau._boutons_options:
-        if bouton.text() != texte:
-            continue
-        if not bouton.isVisible() or bouton.rect().isEmpty():
-            return False
-        QTest.mouseClick(bouton, Qt.MouseButton.LeftButton)
-        return True
+        if bouton.text() == texte:
+            QTest.mouseClick(bouton, Qt.MouseButton.LeftButton)
+            return True
     return False
 
 
@@ -318,39 +295,6 @@ def main() -> int:
             len(panneau._boutons_options) == attendues,
             f"carte {numero} ({marque}) : la forme {modele.forme.name} pose "
             f"{attendues} boutons",
-        )
-
-        # Des propositions serrées se lisent comme une seule phrase coupée, et
-        # on hésite sur celle qu'on vise. Les rectangles doivent donc être à la
-        # fois assez hauts et bien séparés.
-        cadres = [bouton.geometry() for bouton in panneau._boutons_options]
-        _verifier(
-            all(cadre.height() >= HAUTEUR_BOUTON_OPTION for cadre in cadres),
-            f"carte {numero} ({marque}) : chaque proposition garde sa hauteur",
-        )
-        _verifier(
-            all(
-                not premier.intersects(second)
-                for i, premier in enumerate(cadres)
-                for second in cadres[i + 1 :]
-            ),
-            f"carte {numero} ({marque}) : deux propositions ne se touchent pas",
-        )
-        # Côte à côte, deux libellés trop proches se lisent comme une seule
-        # phrase : l'écart horizontal se vérifie à part du vertical.
-        voisins = [
-            (premier, second)
-            for premier in cadres
-            for second in cadres
-            if premier.top() == second.top() and premier.left() < second.left()
-        ]
-        _verifier(
-            all(
-                second.left() - premier.right() - 1 >= ECART_OPTIONS_HORIZONTAL
-                for premier, second in voisins
-            ),
-            f"carte {numero} ({marque}) : les propositions d'une même rangée "
-            f"gardent {ECART_OPTIONS_HORIZONTAL} pixels entre elles",
         )
 
         if numero == 1 and juste:
@@ -494,154 +438,6 @@ def main() -> int:
         _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
         _verifier(not panneau.isVisible(), "le panneau a bien disparu")
 
-    def placement() -> None:
-        """Le panneau doit rester entier à l'écran, où que soit l'icône.
-
-        L'icône vit dans la barre de menus, donc n'importe où sur la largeur ;
-        et la fenêtre grandit en passant à la correction. Les deux ensemble la
-        faisaient sortir par la droite ou par le bas.
-        """
-        ecran = QGuiApplication.primaryScreen()
-        zone = ecran.availableGeometry()
-
-        for description, gauche in (
-            ("collée au bord gauche", zone.left()),
-            ("au milieu", zone.center().x()),
-            ("collée au bord droit", zone.right() - 24),
-        ):
-            panneau.ancrer(QRect(gauche, zone.top(), 24, 22))
-            for hauteur, moment in (
-                (HAUTEUR_MANCHE, "sur la carte"),
-                (HAUTEUR_CORRECTION, "sur la correction"),
-            ):
-                panneau.resize(LARGEUR, hauteur)
-                panneau._positionner()
-                cadre = panneau.geometry()
-                _verifier(
-                    zone.contains(cadre),
-                    f"icône {description}, {moment} : la fenêtre tient dans l'écran",
-                )
-
-        # Le placement ne doit jamais agrandir une fenêtre qu'on a voulue
-        # petite : le repos ne demande que 170 pixels, et les lui refuser
-        # ouvrait un panneau aux trois quarts vide.
-        # En passant par le vrai affichage : c'est lui qui masque le code et
-        # rétrécit la zone basse, donc lui seul qui autorise une petite
-        # fenêtre. La redimensionner à la main se heurterait au minimum que
-        # les blocs imposent, et le contrôle passerait pour de mauvaises
-        # raisons.
-        for afficher, hauteur, page in (
-            (
-                lambda: panneau.afficher_repos("Rien en attente."),
-                HAUTEUR_REPOS,
-                "au repos",
-            ),
-            (
-                lambda: panneau.afficher_bilan(1, 2, "Bien."),
-                HAUTEUR_BILAN,
-                "sur le bilan",
-            ),
-        ):
-            afficher()
-            # Redimensionner une fenêtre déjà à l'écran passe par le système :
-            # la mesurer sans laisser Qt appliquer la géométrie donnerait
-            # l'ancienne taille, et le constat ne dirait rien.
-            application.processEvents()
-            avant = panneau.height()
-            panneau._positionner()
-            application.processEvents()
-
-            # Qt impose ses propres minimums, et ceux-là ne regardent pas le
-            # placement. Ce qu'on lui demande est plus étroit et se vérifie
-            # exactement : ne jamais agrandir ce qu'on lui donne.
-            _verifier(
-                panneau.height() <= avant,
-                f"{page}, le placement n'agrandit pas la fenêtre "
-                f"({avant} → {panneau.height()})",
-            )
-            _verifier(
-                avant < HAUTEUR_MINIMALE,
-                f"{page}, la fenêtre reste petite ({avant} px) au lieu d'être "
-                f"gonflée au plancher de {HAUTEUR_MINIMALE}",
-            )
-
-        # L'écran de la machine qui fait tourner ce script est ce qu'il est :
-        # on ne peut pas en changer, et le rétrécissement resterait sinon
-        # jamais éprouvé. On lui substitue donc une place mesurée à la main.
-        vrai_zone_ecran = panneau._zone_ecran
-        for largeur_ecran, hauteur_ecran in ((1280, 600), (900, 500)):
-            etroit = QRect(0, 0, largeur_ecran, hauteur_ecran)
-            panneau._zone_ecran = lambda zone=etroit: zone
-            panneau.resize(LARGEUR, HAUTEUR_CORRECTION)
-            panneau._positionner()
-            _verifier(
-                etroit.contains(panneau.geometry()),
-                f"sur un écran de {largeur_ecran}×{hauteur_ecran}, "
-                "la fenêtre se rétrécit au lieu de déborder",
-            )
-        panneau._zone_ecran = vrai_zone_ecran
-
-    def ancrage() -> None:
-        """L'ancrage ne doit retenir que ce qui ressemble à l'icône.
-
-        macOS ne rend pas la même position selon que l'application est au
-        premier plan ou non : un clic sur l'icône donne toujours le bon
-        rectangle, l'ouverture automatique arrive pendant qu'on est ailleurs
-        et peut recevoir une position d'un autre temps. Le dernier ancrage
-        valable doit alors continuer de servir plutôt qu'être remplacé.
-        """
-        zone = QGuiApplication.primaryScreen().geometry()
-        bon = QRect(zone.center().x(), zone.top() + 2, 24, 22)
-        panneau.ancrer(bon)
-        _verifier(
-            panneau._zone_ancrage == bon,
-            "une position d'icône plausible est retenue",
-        )
-
-        for description, aberrante in (
-            ("de hauteur nulle", QRect(zone.center().x(), zone.top(), 38, 0)),
-            ("hors de tout écran", QRect(-9000, -9000, 24, 22)),
-            (
-                "au milieu de l'écran",
-                QRect(zone.center().x(), zone.center().y(), 24, 22),
-            ),
-            (
-                "sous la barre de menus",
-                QRect(zone.center().x(), zone.top() + 400, 24, 22),
-            ),
-        ):
-            panneau.ancrer(aberrante)
-            _verifier(
-                panneau._zone_ancrage == bon,
-                f"une position {description} est ignorée, l'ancrage tient",
-            )
-
-    def polices() -> None:
-        """Le code doit se lire dans la monospace d'Apple, pas dans un repli."""
-        familles = enregistrer_police_du_code()
-        _verifier(
-            bool(familles),
-            f"SF Mono est déclarée à Qt ({', '.join(familles) or 'aucune'})",
-        )
-        _verifier(
-            all(
-                nom.strip().strip("'") in POLICE_CODE
-                or nom.strip() in POLICE_CODE
-                for nom in familles
-            ),
-            "les familles obtenues figurent bien dans la pile du code",
-        )
-
-        # Ce qui compte n'est pas le nom demandé mais celui qui sort : Qt se
-        # rabat en silence, et un repli invisible rendrait ce contrôle creux.
-        police = QFont(POLICE_CODE.split(",")[0])
-        police.setPixelSize(13)
-        _verifier(
-            QFontInfo(police).fixedPitch(),
-            f"la police obtenue pour le code est bien à chasse fixe "
-            f"({QFontInfo(police).family()})",
-        )
-
     def _reveiller() -> None:
         """Fait comme si un prompt venait de partir vers Claude Code."""
         orchestrateur._guetteur_prompts = GuetteurFige()
@@ -727,9 +523,6 @@ def main() -> int:
     etapes += [
         transitions_interdites,
         fermeture,
-        polices,
-        ancrage,
-        placement,
         desaccord,
         desaccord_suite,
         repos_reveille,

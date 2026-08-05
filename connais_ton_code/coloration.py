@@ -15,12 +15,10 @@ from pygments.util import ClassNotFound
 COULEUR_FOND_CODE = "#1a1b1e"
 COULEUR_TEXTE_CODE = "#c8ccd4"
 
-# SF Mono d'abord : c'est la monospace qu'Apple a dessinée pour lire du code,
-# et `apparence.enregistrer_police_du_code` la déclare à Qt au démarrage. Les
-# deux noms parce que les deux fichiers du système ne s'annoncent pas pareil.
-# Menlo suit et reprend la main sans bruit si rien n'a pu être enregistré —
-# c'est le cas hors macOS, et le rendu reste correct.
-POLICE_CODE = "SF Mono, '.SF NS Mono', Menlo, Monaco, Consolas, monospace"
+# Menlo en premier : c'est la monospace fournie par macOS. SF Mono, plus jolie,
+# n'est pas toujours visible depuis Qt et provoque un avertissement au
+# démarrage quand elle manque.
+POLICE_CODE = "Menlo, SF Mono, Monaco, Consolas, monospace"
 
 # Ordre de préférence : le premier style installé gagne. Les versions de
 # Pygments n'embarquent pas toutes les mêmes thèmes.

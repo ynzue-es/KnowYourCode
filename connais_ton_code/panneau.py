@@ -72,11 +72,6 @@ HAUTEUR_BILAN = 210
 
 MARGE_ECRAN = 8
 
-# Le plancher au-delà duquel on cesse de rétrécir pour tenir dans un petit
-# écran : en dessous, les blocs à hauteur fixe se recouvrent et la carte
-# devient illisible. Mieux vaut alors déborder un peu que ne rien montrer.
-HAUTEUR_MINIMALE = 400
-
 # Le panneau se décolle de la barre de menus comme le font les menus du
 # système, sans plus.
 ECART_SOUS_LA_BARRE = 6
@@ -85,17 +80,8 @@ ECART_SOUS_LA_BARRE = 6
 # le même extrait, et si la zone de code changeait de taille entre les deux, le
 # regard perdrait sa place au moment précis où il doit relire. Seuls Repos et
 # Bilan s'en écartent, puisqu'ils n'affichent pas de code du tout.
-# Les propositions se répondent à la souris et se lisent d'un regard : serrées,
-# on hésite sur celle qu'on vise, et deux libellés qui se touchent se lisent
-# comme une seule phrase coupée. Un bouton confortable fait 36 pixels ; deux
-# rangées et leur écart en demandent donc 80.
-HAUTEUR_BOUTON_OPTION = 36
-ECART_OPTIONS = 8
-ECART_OPTIONS_HORIZONTAL = 14
-HAUTEUR_ZONE_OPTIONS = 2 * HAUTEUR_BOUTON_OPTION + ECART_OPTIONS
-
 HAUTEUR_ZONE_REPOS = 70
-HAUTEUR_ZONE_CARTE = 160
+HAUTEUR_ZONE_CARTE = 148
 HAUTEUR_ZONE_CORRECTION = 214
 HAUTEUR_ZONE_BILAN = 104
 
@@ -284,24 +270,6 @@ class ZoneCode(TextEdit):
         return selection
 
 
-# L'épaisseur de la bande, en haut de l'écran, où peut vivre une icône de barre
-# de menus. Large : la barre grossit avec l'encoche des portables récents.
-BANDE_BARRE_DE_MENUS = 80
-
-
-def _ancrage_credible(zone_icone: QRect) -> bool:
-    """Dit si cette position peut être celle d'une icône de barre de menus."""
-    if zone_icone.isEmpty():
-        return False
-
-    ecran = QGuiApplication.screenAt(zone_icone.center())
-    if ecran is None:
-        return False
-
-    haut = ecran.geometry().top()
-    return haut <= zone_icone.top() <= haut + BANDE_BARRE_DE_MENUS
-
-
 class Panneau(QWidget):
     """Le panneau qui pose les cartes et recueille les gestes de réponse."""
 
@@ -457,14 +425,10 @@ class Panneau(QWidget):
     def _construire_reponses(self, parent: QWidget) -> QWidget:
         """La grille de propositions, seul geste de réponse qui subsiste."""
         self._zone_options = QWidget(parent)
-        self._zone_options.setFixedHeight(HAUTEUR_ZONE_OPTIONS)
+        self._zone_options.setFixedHeight(68)
         self._grille_options = QGridLayout(self._zone_options)
         self._grille_options.setContentsMargins(0, 0, 0, 0)
-        # L'écart horizontal est le plus large des deux : côte à côte, deux
-        # libellés séparés de huit pixels seulement se lisent comme une seule
-        # phrase, alors que l'un est la bonne réponse et l'autre un leurre.
-        self._grille_options.setHorizontalSpacing(ECART_OPTIONS_HORIZONTAL)
-        self._grille_options.setVerticalSpacing(ECART_OPTIONS)
+        self._grille_options.setSpacing(6)
         return self._zone_options
 
     def _construire_page_correction(self) -> QWidget:
@@ -566,21 +530,12 @@ class Panneau(QWidget):
     def ancrer(self, zone_icone: QRect) -> None:
         """Retient la position de l'icône, sous laquelle s'ouvrir.
 
-        Une icône qui vient d'être créée annonce une position aberrante, du
-        genre `QRect(0, 1440, 38, 0)`, le temps que le système la place
+        Une icône qui vient d'être créée annonce une position aberrante,
+        du genre `QRect(0, 1440, 38, 0)`, le temps que le système la place
         vraiment. Elle n'est pas nulle pour autant : c'est sa hauteur qu'il
-        faut regarder.
-
-        Et surtout, macOS ne répond pas la même chose selon que l'application
-        est au premier plan ou non. Un clic sur l'icône donne toujours une
-        position juste ; l'ouverture automatique, elle, arrive pendant qu'on
-        est ailleurs, et la position rendue peut alors être celle d'avant,
-        voire d'un écran qu'on a débranché. On ne retient donc que ce qui
-        ressemble vraiment à une icône de barre de menus : sur un écran connu,
-        et collée à son bord haut. Le reste est ignoré, et le dernier ancrage
-        valable continue de servir.
+        faut regarder, sinon le panneau s'ouvre hors de l'écran.
         """
-        if _ancrage_credible(zone_icone):
+        if not zone_icone.isEmpty():
             self._zone_ancrage = zone_icone
 
     def repositionner(self) -> None:
@@ -655,10 +610,6 @@ class Panneau(QWidget):
         # la barre de menus, il grandit vers le bas et pas une ligne de code ne
         # bouge — or c'est précisément l'instant où on la relit.
         self.resize(LARGEUR, HAUTEUR_CORRECTION)
-        # Mais grandir sans se replacer faisait passer le bas sous le bord de
-        # l'écran. Le placement remesure et remonte s'il le faut : le code qui
-        # bouge d'un cran vaut mieux qu'un bouton qu'on ne peut plus atteindre.
-        self._positionner()
         self._bouton_suivant.setFocus()
 
     def afficher_bilan(self, justes: int, total: int, commentaire: str) -> None:
@@ -693,62 +644,27 @@ class Panneau(QWidget):
         self.raise_()
         self.activateWindow()
 
-    def _zone_ecran(self) -> QRect:
-        """La place disponible sur l'écran qui porte l'icône.
-
-        Celui de l'icône, et non l'écran principal : avec un moniteur externe,
-        la barre de menus n'est pas forcément sur celui que le système appelle
-        principal. S'y fier plaçait le panneau d'après un écran et l'ancrait
-        sur un autre, c'est-à-dire nulle part.
-        """
-        ecran = None
-        if not self._zone_ancrage.isEmpty():
-            ecran = QGuiApplication.screenAt(self._zone_ancrage.center())
-        if ecran is None:
-            ecran = QGuiApplication.primaryScreen()
-        return ecran.availableGeometry() if ecran else QRect(0, 0, 1280, 800)
-
     def _positionner(self) -> None:
-        """Centre le panneau sous l'icône, en le gardant entier à l'écran.
-
-        Le placement borne aussi la taille, et pas seulement la position : une
-        fenêtre plus haute que l'écran laisserait dehors le bouton qui fait
-        avancer, et la série s'arrêterait là sans qu'on puisse rien y faire.
-        Sur un écran assez grand, rien de tout cela ne joue et la fenêtre garde
-        la taille qu'on lui a demandée.
-        """
-        zone = self._zone_ecran()
-
-        # Le plancher ne sert qu'à limiter le rétrécissement, jamais à gonfler :
-        # le repos ne demande que 170 pixels, et les lui refuser ouvrait une
-        # fenêtre aux trois quarts vide. D'où le `min` avec la hauteur demandée,
-        # qui garde la dernière décision à l'appelant.
-        place = zone.height() - ECART_SOUS_LA_BARRE - MARGE_ECRAN
-        hauteur = min(self.height(), max(place, HAUTEUR_MINIMALE))
-        largeur = min(self.width(), zone.width() - 2 * MARGE_ECRAN)
-        if (largeur, hauteur) != (self.width(), self.height()):
-            self.resize(largeur, hauteur)
+        """Centre le panneau sous l'icône, sans déborder de l'écran."""
+        ecran = QGuiApplication.primaryScreen()
+        zone = ecran.availableGeometry() if ecran else QRect(0, 0, 1280, 800)
 
         if self._zone_ancrage.isEmpty():
             # Position de repli : le coin où vit l'icône, faute de savoir où
             # elle est exactement.
-            x = zone.right() - self.width() - MARGE_ECRAN
-        else:
-            x = self._zone_ancrage.center().x() - self.width() // 2
+            self.move(
+                zone.right() - self.width() - MARGE_ECRAN,
+                zone.top() + ECART_SOUS_LA_BARRE,
+            )
+            return
 
+        x = self._zone_ancrage.center().x() - self.width() // 2
         x = max(
             zone.left() + MARGE_ECRAN,
             min(x, zone.right() - self.width() - MARGE_ECRAN),
         )
         # `availableGeometry` commence déjà sous la barre de menus.
-        y = max(
-            zone.top(),
-            min(
-                zone.top() + ECART_SOUS_LA_BARRE,
-                zone.bottom() - self.height() - MARGE_ECRAN,
-            ),
-        )
-        self.move(x, y)
+        self.move(x, zone.top() + ECART_SOUS_LA_BARRE)
 
     # ------------------------------------------------------------------
     # Interactions
@@ -770,7 +686,7 @@ class Panneau(QWidget):
         colonnes = min(len(options), _COLONNES_QCM) or 1
         for rang, texte in enumerate(options):
             bouton = PushButton(texte, self._zone_options)
-            bouton.setMinimumHeight(HAUTEUR_BOUTON_OPTION)
+            bouton.setMinimumHeight(31)
             bouton.clicked.connect(
                 lambda _=False, choix=texte: self._repondre(choix)
             )
