@@ -1,8 +1,9 @@
 """Le panneau accroché sous l'icône de la barre de menus.
 
-Il ne connaît ni le détecteur, ni le sélecteur, ni l'évaluateur : il affiche
-ce qu'on lui donne et signale ce que l'utilisateur demande. Toutes les
-décisions appartiennent à l'orchestrateur.
+Il ne connaît ni le repérage, ni le sélecteur, ni le générateur de cartes : il
+pose la carte qu'on lui donne, montre la correction qu'on lui donne, et signale
+ce que l'utilisateur demande. Toutes les décisions appartiennent à
+l'orchestrateur.
 """
 
 from __future__ import annotations
@@ -11,18 +12,22 @@ import sys
 
 from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
+    QColor,
     QGuiApplication,
     QHideEvent,
     QIcon,
     QKeyEvent,
-    QKeySequence,
-    QShortcut,
+    QMouseEvent,
+    QTextCursor,
+    QTextFormat,
 )
 from PyQt6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QStackedWidget,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -30,8 +35,7 @@ from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     FluentIcon,
-    IndeterminateProgressRing,
-    PlainTextEdit,
+    LineEdit,
     PrimaryPushButton,
     PushButton,
     SmoothScrollArea,
@@ -45,22 +49,20 @@ from .apparence import (
     configurer_panneau,
     style_panneau,
 )
-from .coloration import COULEUR_FOND_CODE, colorer
+from .cartes import Carte, Correction, Forme
+from .coloration import (
+    COULEUR_FOND_CODE,
+    COULEUR_TEXTE_CODE,
+    POLICE_CODE,
+    colorer,
+)
 from .logo import pixmap_marque
-from .modeles import Evaluation, Extrait
+from .modeles import Extrait
 
 LARGEUR = 620
-HAUTEUR_QUESTION = 500
+HAUTEUR_MANCHE = 520
 HAUTEUR_REPOS = 170
-
-# Hauteur figée du bas du panneau, sinon la zone de code se redimensionne au
-# moindre mot tapé et le regard perd sa place. Repos et Retour s'en écartent
-# dans un sens ou dans l'autre : Repos n'a qu'un message et un bouton à poser,
-# Retour est le seul à demander davantage, puisque c'est là que le texte à
-# lire se trouve.
-HAUTEUR_ZONE_REPOS = 70
-HAUTEUR_ZONE_BASSE = 124
-HAUTEUR_ZONE_RETOUR = 186
+HAUTEUR_BILAN = 210
 
 MARGE_ECRAN = 8
 
@@ -68,10 +70,37 @@ MARGE_ECRAN = 8
 # système, sans plus.
 ECART_SOUS_LA_BARRE = 6
 
+# Hauteur figée du bas du panneau : la carte et sa correction se succèdent sur
+# le même extrait, et si la zone de code changeait de taille entre les deux, le
+# regard perdrait sa place au moment précis où il doit relire. Seuls Repos et
+# Bilan s'en écartent, puisqu'ils n'affichent pas de code du tout.
+HAUTEUR_ZONE_REPOS = 70
+HAUTEUR_ZONE_CARTE = 148
+HAUTEUR_ZONE_CORRECTION = 214
+HAUTEUR_ZONE_BILAN = 104
+
+COULEUR_JUSTE = "#4ec9a0"
+COULEUR_FAUX = "#ff7b72"
+COULEUR_NUMERO_LIGNE = "#575d66"
+
+# La ligne visée se pose en fond derrière le code : un cadre ou une flèche
+# vaudrait désignation, et on veut que l'œil y arrive en lisant, pas qu'il y
+# soit envoyé.
+FOND_LIGNE_VISEE = QColor(76, 141, 255, 46)
+FOND_LIGNE_SURVOLEE = QColor(255, 255, 255, 20)
+
 _INDEX_REPOS = 0
-_INDEX_SAISIE = 1
-_INDEX_ATTENTE = 2
-_INDEX_RETOUR = 3
+_INDEX_CARTE = 1
+_INDEX_CORRECTION = 2
+_INDEX_BILAN = 3
+
+_INDEX_OPTIONS = 0
+_INDEX_CLIC = 1
+_INDEX_MOT = 2
+
+# Deux colonnes : quatre propositions à la file mangeraient la hauteur de la
+# zone de code, qui reste ce qu'on est venu lire.
+_COLONNES_QCM = 2
 
 
 def _activer_application() -> None:
@@ -91,10 +120,202 @@ def _activer_application() -> None:
     NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
 
 
-class Panneau(QWidget):
-    """Le panneau qui pose la question et recueille la réponse."""
+def _decouper_en_lignes(corps: str) -> list[str]:
+    """Coupe le HTML de Pygments en une entrée par ligne source.
 
-    reponse_soumise = pyqtSignal(str)
+    Une chaîne ou un commentaire sur plusieurs lignes tient dans une seule
+    balise, qui enjambe donc les retours : couper naïvement sur `\\n` rendrait
+    des lignes au balisage déséquilibré, que Qt affiche n'importe comment. On
+    referme donc les balises ouvertes en fin de ligne et on les rouvre à la
+    suivante. Pygments n'émet que des `<span>`, ce qui rend la refermeture
+    triviale.
+    """
+    lignes: list[str] = []
+    ouvertes: list[str] = []
+    courante: list[str] = []
+
+    position = 0
+    while position < len(corps):
+        caractere = corps[position]
+        if caractere == "<":
+            fin = corps.find(">", position)
+            if fin == -1:
+                courante.append(corps[position:])
+                break
+            balise = corps[position : fin + 1]
+            if balise.startswith("</"):
+                if ouvertes:
+                    ouvertes.pop()
+            elif not balise.endswith("/>"):
+                ouvertes.append(balise)
+            courante.append(balise)
+            position = fin + 1
+        elif caractere == "\n":
+            courante.append("</span>" * len(ouvertes))
+            lignes.append("".join(courante))
+            courante = list(ouvertes)
+            position += 1
+        else:
+            courante.append(caractere)
+            position += 1
+
+    courante.append("</span>" * len(ouvertes))
+    lignes.append("".join(courante))
+
+    # Pygments termine son rendu par un retour à la ligne : sans ce retrait,
+    # chaque extrait gagnerait une ligne vide numérotée.
+    if len(lignes) > 1 and not lignes[-1].strip():
+        lignes.pop()
+    return lignes
+
+
+def _code_numerote(code: str, langage: str) -> str:
+    """Rend le code coloré, une ligne par bloc, précédé de son numéro.
+
+    Les numéros sont indispensables : ce sont eux qui permettent à une carte de
+    dire « ligne 7 », et à une réponse d'être un clic. Ils font partie du texte
+    plutôt que d'une marge peinte à côté, pour qu'un bloc de document
+    corresponde exactement à une ligne source — c'est ce qui rend le clic
+    lisible sans calcul de coordonnées.
+    """
+    entier = colorer(code, langage)
+    debut = entier.find(">") + 1
+    lignes = _decouper_en_lignes(entier[debut : entier.rfind("</pre>")])
+
+    largeur = len(str(len(lignes)))
+    corps = "\n".join(
+        f'<span style="color:{COULEUR_NUMERO_LIGNE};">'
+        f"{str(numero).rjust(largeur).replace(' ', '&nbsp;')}</span>"
+        f"&nbsp;&nbsp;{ligne}"
+        for numero, ligne in enumerate(lignes, start=1)
+    )
+    return (
+        f'<pre style="font-family:{POLICE_CODE}; font-size:12px;'
+        f" line-height:150%; color:{COULEUR_TEXTE_CODE};"
+        f' white-space:pre; margin:0;">{corps}</pre>'
+    )
+
+
+class ZoneCode(TextEdit):
+    """Le bloc de code : numéroté, parfois souligné, parfois cliquable.
+
+    Cliquer une ligne est le geste de réponse des cartes « repérer ». La zone
+    ne décide pas pour autant que la réponse est bonne : elle dit quelle ligne
+    a été choisie, et rien de plus.
+    """
+
+    ligne_choisie = pyqtSignal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setReadOnly(True)
+        # Le code ne doit pas être replié : une ligne coupée au milieu change
+        # la façon dont on la lit, et fausserait la numérotation.
+        self.setLineWrapMode(TextEdit.LineWrapMode.NoWrap)
+        self.setMinimumHeight(90)
+        self.setMouseTracking(True)
+        self.setStyleSheet(
+            "QTextEdit { background-color: %s;"
+            " border: 1px solid rgba(255, 255, 255, 0.08);"
+            " border-radius: 6px; padding: 8px; }" % COULEUR_FOND_CODE
+        )
+
+        self._cliquable = False
+        self._ligne_visee = 0
+        self._ligne_survolee = 0
+
+    def montrer(self, code: str, langage: str, ligne: int, cliquable: bool) -> None:
+        """Affiche l'extrait, en visant une ligne et en ouvrant ou non le clic."""
+        self.setHtml(_code_numerote(code, langage))
+        self._cliquable = cliquable
+        self._ligne_visee = ligne
+        self._ligne_survolee = 0
+        self.viewport().setCursor(
+            Qt.CursorShape.PointingHandCursor
+            if cliquable
+            else Qt.CursorShape.IBeamCursor
+        )
+        self._souligner()
+        self._amener_en_vue(ligne)
+
+    def _amener_en_vue(self, ligne: int) -> None:
+        """Remonte en haut de l'extrait, et ne descend que s'il le faut.
+
+        Un extrait qui tient tout entier dans la zone ne doit pas bouger d'un
+        cran : une première ligne coupée en haut se lit comme du code manquant.
+        """
+        self.verticalScrollBar().setValue(0)
+        self.horizontalScrollBar().setValue(0)
+        if ligne <= 0 or self.verticalScrollBar().maximum() == 0:
+            return
+
+        bloc = self.document().findBlockByNumber(ligne - 1)
+        if not bloc.isValid():
+            return
+        self.setTextCursor(QTextCursor(bloc))
+        self.ensureCursorVisible()
+        self.horizontalScrollBar().setValue(0)
+
+    def _souligner(self) -> None:
+        selections = [
+            selection
+            for selection in (
+                self._bande(self._ligne_visee, FOND_LIGNE_VISEE),
+                self._bande(self._ligne_survolee, FOND_LIGNE_SURVOLEE),
+            )
+            if selection is not None
+        ]
+        self.setExtraSelections(selections)
+
+    def _bande(self, ligne: int, couleur: QColor) -> QTextEdit.ExtraSelection | None:
+        """Peint une ligne entière en fond, bord à bord."""
+        if ligne <= 0:
+            return None
+        bloc = self.document().findBlockByNumber(ligne - 1)
+        if not bloc.isValid():
+            return None
+
+        selection = QTextEdit.ExtraSelection()
+        selection.format.setBackground(couleur)
+        # Sans cette propriété, le fond s'arrête au dernier caractère et la
+        # bande a la forme dentelée du code.
+        selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        curseur = QTextCursor(bloc)
+        curseur.clearSelection()
+        selection.cursor = curseur
+        return selection
+
+    def _ligne_sous(self, evenement: QMouseEvent) -> int:
+        position = evenement.position().toPoint()
+        return self.cursorForPosition(position).blockNumber() + 1
+
+    def mousePressEvent(self, evenement: QMouseEvent) -> None:
+        if self._cliquable and evenement.button() == Qt.MouseButton.LeftButton:
+            self.ligne_choisie.emit(self._ligne_sous(evenement))
+            evenement.accept()
+            return
+        super().mousePressEvent(evenement)
+
+    def mouseMoveEvent(self, evenement: QMouseEvent) -> None:
+        super().mouseMoveEvent(evenement)
+        if not self._cliquable:
+            return
+        ligne = self._ligne_sous(evenement)
+        if ligne != self._ligne_survolee:
+            self._ligne_survolee = ligne
+            self._souligner()
+
+    def leaveEvent(self, evenement) -> None:
+        super().leaveEvent(evenement)
+        if self._ligne_survolee:
+            self._ligne_survolee = 0
+            self._souligner()
+
+
+class Panneau(QWidget):
+    """Le panneau qui pose les cartes et recueille les gestes de réponse."""
+
+    reponse_donnee = pyqtSignal(str)
     passage_demande = pyqtSignal()
     suite_demandee = pyqtSignal()
     question_demandee = pyqtSignal()
@@ -109,8 +330,9 @@ class Panneau(QWidget):
         self.setWindowTitle("KnowYourCode")
 
         self._zone_ancrage = QRect()
+        self._reponse_ouverte = False
+        self._boutons_options: list[PushButton] = []
         self._construire()
-        self._brancher_raccourcis()
 
     # ------------------------------------------------------------------
     # Construction
@@ -156,6 +378,13 @@ class Panneau(QWidget):
         ligne.addWidget(self._etiquette_etat)
         ligne.addStretch(1)
 
+        # L'avancement se tient dans l'entête et non près des boutons : on veut
+        # pouvoir savoir combien il reste sans quitter le code des yeux plus
+        # d'un instant.
+        self._etiquette_avancement = CaptionLabel("", self._cadre)
+        self._etiquette_avancement.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
+        ligne.addWidget(self._etiquette_avancement)
+
         fermer = TransparentToolButton(FluentIcon.CLOSE, self._cadre)
         fermer.setFixedSize(26, 26)
         fermer.setIconSize(QSize(9, 9))
@@ -179,26 +408,17 @@ class Panneau(QWidget):
         return bloc
 
     def _construire_zone_code(self) -> QWidget:
-        self._zone_code = TextEdit(self._cadre)
-        self._zone_code.setReadOnly(True)
-        # Le code ne doit pas être replié : une ligne coupée au milieu change
-        # la façon dont on la lit.
-        self._zone_code.setLineWrapMode(TextEdit.LineWrapMode.NoWrap)
-        self._zone_code.setMinimumHeight(90)
-        self._zone_code.setStyleSheet(
-            "QTextEdit { background-color: %s;"
-            " border: 1px solid rgba(255, 255, 255, 0.08);"
-            " border-radius: 6px; padding: 8px; }" % COULEUR_FOND_CODE
-        )
+        self._zone_code = ZoneCode(self._cadre)
+        self._zone_code.ligne_choisie.connect(self._sur_ligne_choisie)
         return self._zone_code
 
     def _construire_zone_basse(self) -> QWidget:
         self._pile = QStackedWidget(self._cadre)
-        self._pile.setFixedHeight(HAUTEUR_ZONE_BASSE)
+        self._pile.setFixedHeight(HAUTEUR_ZONE_CARTE)
         self._pile.addWidget(self._construire_page_repos())
-        self._pile.addWidget(self._construire_page_saisie())
-        self._pile.addWidget(self._construire_page_attente())
-        self._pile.addWidget(self._construire_page_retour())
+        self._pile.addWidget(self._construire_page_carte())
+        self._pile.addWidget(self._construire_page_correction())
+        self._pile.addWidget(self._construire_page_bilan())
         return self._pile
 
     def _construire_page_repos(self) -> QWidget:
@@ -212,97 +432,160 @@ class Panneau(QWidget):
         self._message_repos.setWordWrap(True)
         colonne.addWidget(self._message_repos)
 
-        bouton = PrimaryPushButton("Poser une question", page)
+        bouton = PrimaryPushButton("Commencer une série", page)
         bouton.clicked.connect(self.question_demandee.emit)
         colonne.addWidget(bouton)
         colonne.addStretch(1)
         return page
 
-    def _construire_page_saisie(self) -> QWidget:
+    def _construire_page_carte(self) -> QWidget:
         page = QWidget(self._pile)
         colonne = QVBoxLayout(page)
         colonne.setContentsMargins(0, 0, 0, 0)
         colonne.setSpacing(8)
 
-        self._zone_reponse = PlainTextEdit(page)
-        self._zone_reponse.setPlaceholderText(
-            "Explique ce que fait cette fonction, et pourquoi elle est écrite comme ça."
-        )
-        colonne.addWidget(self._zone_reponse, stretch=1)
+        self._etiquette_question = BodyLabel("", page)
+        self._etiquette_question.setWordWrap(True)
+        colonne.addWidget(self._etiquette_question)
+
+        colonne.addWidget(self._construire_reponses(page))
+        colonne.addStretch(1)
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-
-        rappel = CaptionLabel("Cmd + Entrée", page)
-        rappel.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-        actions.addWidget(rappel)
         actions.addStretch(1)
 
+        # Passer abandonne la série entière, pas seulement la carte : une
+        # question qu'on saute a déjà appris quelque chose, une série qu'on
+        # traîne à moitié n'apprend plus rien.
         self._bouton_passer = PushButton("Passer", page)
         self._bouton_passer.clicked.connect(self.passage_demande.emit)
         actions.addWidget(self._bouton_passer)
 
-        self._bouton_repondre = PrimaryPushButton("Répondre", page)
-        self._bouton_repondre.clicked.connect(self._soumettre)
-        actions.addWidget(self._bouton_repondre)
-
         colonne.addLayout(actions)
         return page
 
-    def _construire_page_attente(self) -> QWidget:
-        page = QWidget(self._pile)
+    def _construire_reponses(self, parent: QWidget) -> QWidget:
+        self._pile_reponses = QStackedWidget(parent)
+        self._pile_reponses.setFixedHeight(68)
+        self._pile_reponses.addWidget(self._construire_options())
+        self._pile_reponses.addWidget(self._construire_clic())
+        self._pile_reponses.addWidget(self._construire_mot())
+        return self._pile_reponses
+
+    def _construire_options(self) -> QWidget:
+        page = QWidget(self._pile_reponses)
+        self._grille_options = QGridLayout(page)
+        self._grille_options.setContentsMargins(0, 0, 0, 0)
+        self._grille_options.setSpacing(6)
+        return page
+
+    def _construire_clic(self) -> QWidget:
+        page = QWidget(self._pile_reponses)
         colonne = QVBoxLayout(page)
         colonne.setContentsMargins(0, 0, 0, 0)
         colonne.addStretch(1)
 
-        ligne = QHBoxLayout()
-        ligne.setSpacing(10)
-        ligne.addStretch(1)
-
-        anneau = IndeterminateProgressRing(page)
-        anneau.setFixedSize(22, 22)
-        anneau.setStrokeWidth(3)
-        ligne.addWidget(anneau)
-        ligne.addWidget(BodyLabel("Évaluation en cours", page))
-        ligne.addStretch(1)
-
-        colonne.addLayout(ligne)
+        consigne = BodyLabel("Clique la ligne, là-haut, dans le code.", page)
+        consigne.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
+        colonne.addWidget(consigne)
         colonne.addStretch(1)
         return page
 
-    def _construire_page_retour(self) -> QWidget:
+    def _construire_mot(self) -> QWidget:
+        page = QWidget(self._pile_reponses)
+        colonne = QVBoxLayout(page)
+        colonne.setContentsMargins(0, 0, 0, 0)
+        colonne.setSpacing(6)
+        colonne.addStretch(1)
+
+        ligne = QHBoxLayout()
+        ligne.setSpacing(8)
+
+        self._champ_mot = LineEdit(page)
+        self._champ_mot.setPlaceholderText("un mot")
+        self._champ_mot.setClearButtonEnabled(False)
+        self._champ_mot.returnPressed.connect(self._valider_mot)
+        ligne.addWidget(self._champ_mot, stretch=1)
+
+        self._bouton_valider = PrimaryPushButton("Valider", page)
+        self._bouton_valider.clicked.connect(self._valider_mot)
+        ligne.addWidget(self._bouton_valider)
+
+        colonne.addLayout(ligne)
+
+        rappel = CaptionLabel("Entrée pour valider", page)
+        rappel.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
+        colonne.addWidget(rappel)
+        colonne.addStretch(1)
+        return page
+
+    def _construire_page_correction(self) -> QWidget:
+        page = QWidget(self._pile)
+        colonne = QVBoxLayout(page)
+        colonne.setContentsMargins(0, 0, 0, 0)
+        colonne.setSpacing(6)
+
+        self._etiquette_verdict = StrongBodyLabel("", page)
+        colonne.addWidget(self._etiquette_verdict)
+
+        self._etiquette_bonne_reponse = BodyLabel("", page)
+        self._etiquette_bonne_reponse.setWordWrap(True)
+        colonne.addWidget(self._etiquette_bonne_reponse)
+
+        self._etiquette_explication = BodyLabel("", page)
+        self._etiquette_explication.setWordWrap(True)
+        self._etiquette_explication.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
+
+        # L'explication est le seul texte long du panneau, et le seul qu'on
+        # relit : elle défile plutôt que de rogner la zone de code.
+        defilement = SmoothScrollArea(page)
+        defilement.setWidget(self._etiquette_explication)
+        defilement.setWidgetResizable(True)
+        defilement.setFrameShape(QFrame.Shape.NoFrame)
+        defilement.setStyleSheet("QScrollArea, QWidget { background: transparent; }")
+        defilement.viewport().setStyleSheet("background: transparent;")
+        colonne.addWidget(defilement, stretch=1)
+
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        self._bouton_suivant = PrimaryPushButton("Carte suivante", page)
+        self._bouton_suivant.clicked.connect(self.suite_demandee.emit)
+        actions.addWidget(self._bouton_suivant)
+        colonne.addLayout(actions)
+        return page
+
+    def _construire_page_bilan(self) -> QWidget:
         page = QWidget(self._pile)
         colonne = QVBoxLayout(page)
         colonne.setContentsMargins(0, 0, 0, 0)
         colonne.setSpacing(8)
+        colonne.addStretch(1)
 
-        self._contenu_retour = QWidget()
-        self._colonne_retour = QVBoxLayout(self._contenu_retour)
-        self._colonne_retour.setContentsMargins(0, 0, 8, 0)
-        self._colonne_retour.setSpacing(6)
-        self._colonne_retour.addStretch(1)
+        self._etiquette_bilan = StrongBodyLabel("", page)
+        colonne.addWidget(self._etiquette_bilan)
 
-        self._defilement_retour = SmoothScrollArea(page)
-        self._defilement_retour.setWidget(self._contenu_retour)
-        self._defilement_retour.setWidgetResizable(True)
-        self._defilement_retour.setFrameShape(QFrame.Shape.NoFrame)
-        self._defilement_retour.setStyleSheet(
-            "QScrollArea, QWidget { background: transparent; }"
-        )
-        self._defilement_retour.viewport().setStyleSheet("background: transparent;")
-        colonne.addWidget(self._defilement_retour, stretch=1)
+        self._commentaire_bilan = BodyLabel("", page)
+        self._commentaire_bilan.setWordWrap(True)
+        self._commentaire_bilan.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
+        colonne.addWidget(self._commentaire_bilan)
 
         actions = QHBoxLayout()
-        self._etiquette_score = CaptionLabel("", page)
-        self._etiquette_score.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-        actions.addWidget(self._etiquette_score)
+        actions.setSpacing(8)
         actions.addStretch(1)
 
-        self._bouton_suivant = PrimaryPushButton("Suivant", page)
-        self._bouton_suivant.clicked.connect(self.suite_demandee.emit)
-        actions.addWidget(self._bouton_suivant)
+        refermer = PushButton("Refermer", page)
+        refermer.clicked.connect(self.fermeture_demandee.emit)
+        actions.addWidget(refermer)
+
+        self._bouton_serie_suivante = PrimaryPushButton("Une autre série", page)
+        self._bouton_serie_suivante.clicked.connect(self.question_demandee.emit)
+        actions.addWidget(self._bouton_serie_suivante)
 
         colonne.addLayout(actions)
+        colonne.addStretch(1)
         return page
 
     def _construire_pied(self) -> QWidget:
@@ -329,13 +612,6 @@ class Panneau(QWidget):
         ligne.addWidget(quitter)
         return pied
 
-    def _brancher_raccourcis(self) -> None:
-        # Sur macOS, Qt fait déjà correspondre Ctrl à la touche Cmd.
-        for sequence in ("Ctrl+Return", "Ctrl+Enter"):
-            raccourci = QShortcut(QKeySequence(sequence), self)
-            raccourci.setContext(Qt.ShortcutContext.WindowShortcut)
-            raccourci.activated.connect(self._soumettre)
-
     # ------------------------------------------------------------------
     # Affichage par état
     # ------------------------------------------------------------------
@@ -357,72 +633,96 @@ class Panneau(QWidget):
             self._positionner()
 
     def afficher_repos(self, message: str) -> None:
-        """Ouvre le panneau sans question en cours."""
+        """Ouvre le panneau sans série en cours."""
+        self._reponse_ouverte = False
         self._etiquette_etat.setText("")
+        self._etiquette_avancement.setText("")
         self._message_repos.setText(message)
         self._localisation.setVisible(False)
         self._zone_code.setVisible(False)
-        self._pile.setVisible(True)
         self._pile.setFixedHeight(HAUTEUR_ZONE_REPOS)
         self._pile.setCurrentIndex(_INDEX_REPOS)
         self._afficher(LARGEUR, HAUTEUR_REPOS)
 
-    def afficher_question(self, extrait: Extrait) -> None:
-        """Ouvre le panneau sur un nouvel extrait."""
-        self._etiquette_etat.setText("question")
+    def afficher_carte(
+        self, extrait: Extrait, carte: Carte, numero: int, total: int
+    ) -> None:
+        """Pose une carte de la série sur son extrait."""
+        self._etiquette_etat.setText("carte")
+        self._etiquette_avancement.setText(f"{numero} / {total}")
         self._etiquette_fichier.setText(extrait.chemin_fichier)
         self._etiquette_fonction.setText(extrait.nom_fonction)
-        self._zone_code.setHtml(colorer(extrait.code, extrait.langage))
-        self._zone_code.verticalScrollBar().setValue(0)
+        self._etiquette_question.setText(carte.question)
+        self._preparer_reponse(carte)
 
         self._localisation.setVisible(True)
         self._zone_code.setVisible(True)
-        self._pile.setVisible(True)
+        self._pile.setFixedHeight(HAUTEUR_ZONE_CARTE)
+        self._pile.setCurrentIndex(_INDEX_CARTE)
 
-        self._zone_reponse.clear()
-        self._zone_reponse.setReadOnly(False)
-        self._bouton_repondre.setEnabled(True)
-        self._bouton_passer.setEnabled(True)
-        self._pile.setFixedHeight(HAUTEUR_ZONE_BASSE)
-        self._pile.setCurrentIndex(_INDEX_SAISIE)
+        # Le panneau prend sa taille avant que le code n'arrive : c'est cette
+        # taille qui dit si l'extrait tient en entier, donc s'il faut le faire
+        # défiler jusqu'à la ligne visée.
+        self._afficher(LARGEUR, HAUTEUR_MANCHE)
 
-        self._afficher(LARGEUR, HAUTEUR_QUESTION)
-        self._zone_reponse.setFocus()
+        # Sur une carte « repérer », la ligne est ce qu'on cherche : la
+        # souligner reviendrait à donner la réponse avec la question.
+        repere = carte.forme is Forme.REPERER
+        self._zone_code.montrer(
+            extrait.code, extrait.langage, 0 if repere else carte.ligne, repere
+        )
+        self._reponse_ouverte = True
 
-    def afficher_attente(self) -> None:
-        """Passe en état Évaluation, sans rien bloquer d'autre."""
-        self._etiquette_etat.setText("évaluation")
-        self._pile.setCurrentIndex(_INDEX_ATTENTE)
+        if carte.forme in (Forme.PREDIRE, Forme.NOMMER):
+            self._champ_mot.setFocus()
 
-    def afficher_retour(self, evaluation: Evaluation) -> None:
-        """Passe en état Retour et remplit le verdict."""
-        self._etiquette_etat.setText("retour")
-        self._vider_retour()
+    def afficher_correction(
+        self, correction: Correction, numero: int, total: int
+    ) -> None:
+        """Dit tout de suite si c'était juste, et pourquoi."""
+        self._reponse_ouverte = False
+        self._etiquette_etat.setText("correction")
+        self._etiquette_avancement.setText(f"{numero} / {total}")
 
-        verdict = BodyLabel(evaluation.verdict, self._contenu_retour)
-        verdict.setWordWrap(True)
-        self._colonne_retour.insertWidget(0, verdict)
+        couleur = COULEUR_JUSTE if correction.juste else COULEUR_FAUX
+        self._etiquette_verdict.setText("Juste" if correction.juste else "Raté")
+        self._etiquette_verdict.setStyleSheet(f"color: {couleur};")
 
-        position = 1
-        if evaluation.points_oublies:
-            titre = CaptionLabel("Ce que tu as oublié", self._contenu_retour)
-            titre.setStyleSheet(f"color: {COULEUR_TEXTE_ATTENUE};")
-            self._colonne_retour.insertWidget(position, titre)
-            position += 1
+        # La bonne réponse n'est rappelée qu'en cas d'erreur : la répéter après
+        # une réussite met le doute là où il n'y en avait pas.
+        self._etiquette_bonne_reponse.setText(
+            "" if correction.juste else f"C'était : {correction.bonne_reponse}"
+        )
+        self._etiquette_bonne_reponse.setVisible(not correction.juste)
 
-            for point in evaluation.points_oublies:
-                ligne = BodyLabel(f"•  {point}", self._contenu_retour)
-                ligne.setWordWrap(True)
-                self._colonne_retour.insertWidget(position, ligne)
-                position += 1
+        self._etiquette_explication.setText(correction.explication)
+        self._bouton_suivant.setText(
+            "Voir le bilan" if numero >= total else "Carte suivante"
+        )
 
-        self._etiquette_score.setText(f"{evaluation.score} / 100")
-        self._pile.setFixedHeight(HAUTEUR_ZONE_RETOUR)
-        self._pile.setCurrentIndex(_INDEX_RETOUR)
+        self._pile.setFixedHeight(HAUTEUR_ZONE_CORRECTION)
+        self._pile.setCurrentIndex(_INDEX_CORRECTION)
+        self._bouton_suivant.setFocus()
+
+    def afficher_bilan(self, justes: int, total: int, commentaire: str) -> None:
+        """Referme la série sur son compte."""
+        self._reponse_ouverte = False
+        self._etiquette_etat.setText("bilan")
+        self._etiquette_avancement.setText("")
+        self._etiquette_bilan.setText(f"{justes} / {total}")
+        self._commentaire_bilan.setText(commentaire)
+
+        self._localisation.setVisible(False)
+        self._zone_code.setVisible(False)
+        self._pile.setFixedHeight(HAUTEUR_ZONE_BILAN)
+        self._pile.setCurrentIndex(_INDEX_BILAN)
+        self._afficher(LARGEUR, HAUTEUR_BILAN)
+        self._bouton_serie_suivante.setFocus()
 
     def fermer(self) -> None:
         """Referme le panneau, sans rien conserver de la saisie."""
-        self._zone_reponse.clear()
+        self._reponse_ouverte = False
+        self._champ_mot.clear()
         self.hide()
 
     # ------------------------------------------------------------------
@@ -463,20 +763,64 @@ class Panneau(QWidget):
     # Interactions
     # ------------------------------------------------------------------
 
-    def _vider_retour(self) -> None:
-        while self._colonne_retour.count() > 1:
-            element = self._colonne_retour.takeAt(0)
-            widget = element.widget()
-            if widget is not None:
-                widget.deleteLater()
-
-    def _soumettre(self) -> None:
-        if self._pile.currentIndex() != _INDEX_SAISIE:
+    def _preparer_reponse(self, carte: Carte) -> None:
+        """Met en place le geste que la forme de la carte demande."""
+        if carte.forme in (Forme.QCM, Forme.VRAI_FAUX):
+            self._poser_options(carte.options)
+            self._pile_reponses.setCurrentIndex(_INDEX_OPTIONS)
             return
-        self._bouton_repondre.setEnabled(False)
-        self._bouton_passer.setEnabled(False)
-        self._zone_reponse.setReadOnly(True)
-        self.reponse_soumise.emit(self._zone_reponse.toPlainText())
+
+        self._poser_options(())
+        if carte.forme is Forme.REPERER:
+            self._pile_reponses.setCurrentIndex(_INDEX_CLIC)
+            return
+
+        self._champ_mot.clear()
+        self._champ_mot.setEnabled(True)
+        self._bouton_valider.setEnabled(True)
+        self._pile_reponses.setCurrentIndex(_INDEX_MOT)
+
+    def _poser_options(self, options: tuple[str, ...]) -> None:
+        """Refait la grille de propositions, celle d'avant n'ayant plus cours."""
+        for bouton in self._boutons_options:
+            self._grille_options.removeWidget(bouton)
+            bouton.deleteLater()
+        self._boutons_options = []
+
+        # Deux propositions tiennent côte à côte ; quatre passent en deux
+        # rangées, ce qui les garde toutes lisibles d'un seul regard.
+        colonnes = min(len(options), _COLONNES_QCM) or 1
+        for rang, texte in enumerate(options):
+            bouton = PushButton(texte, self._pile_reponses)
+            bouton.setMinimumHeight(31)
+            bouton.clicked.connect(
+                lambda _=False, choix=texte: self._repondre(choix)
+            )
+            self._grille_options.addWidget(
+                bouton, rang // colonnes, rang % colonnes
+            )
+            self._boutons_options.append(bouton)
+
+    def _valider_mot(self) -> None:
+        mot = self._champ_mot.text().strip()
+        # Un champ vide n'est pas une réponse : mieux vaut ne rien faire que
+        # de compter une faute à qui a effleuré la touche Entrée.
+        if mot:
+            self._repondre(mot)
+
+    def _sur_ligne_choisie(self, ligne: int) -> None:
+        self._repondre(str(ligne))
+
+    def _repondre(self, reponse: str) -> None:
+        """Signale la réponse une fois, et referme le geste derrière elle."""
+        if not self._reponse_ouverte or self._pile.currentIndex() != _INDEX_CARTE:
+            return
+        self._reponse_ouverte = False
+        for bouton in self._boutons_options:
+            bouton.setEnabled(False)
+        self._champ_mot.setEnabled(False)
+        self._bouton_valider.setEnabled(False)
+        self.reponse_donnee.emit(reponse)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
