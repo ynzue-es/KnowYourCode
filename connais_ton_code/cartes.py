@@ -108,6 +108,9 @@ class Correction:
     bonne_reponse: str
     """La bonne réponse en clair, à montrer quand on s'est trompé."""
     explication: str
+    reponse_donnee: str = ""
+    """Ce qui a été répondu. L'historique le garde : savoir *ce qu'on a cru*
+    vaut mieux, pour réviser, que de savoir seulement qu'on s'est trompé."""
 
 
 def corriger(carte: Carte, reponse: str | int) -> Correction:
@@ -118,7 +121,12 @@ def corriger(carte: Carte, reponse: str | int) -> Correction:
     dans un formulaire.
     """
     if carte.forme in FORMES_A_OPTIONS:
-        juste = _rang(reponse) == carte.bonne
+        # Le rang ou le libellé, indifféremment. Le panneau tient le texte du
+        # bouton cliqué ; l'obliger à retrouver son rang pour le repasser ici
+        # n'ajouterait qu'un endroit de plus où les deux peuvent se désaccorder.
+        juste = _rang(reponse) == carte.bonne or _parmi(
+            reponse, carte.options[carte.bonne : carte.bonne + 1]
+        )
     elif carte.forme is Forme.REPERER:
         juste = _rang(reponse) == carte.bonne
     elif carte.forme is Forme.NOMMER and carte.notion is not None:
@@ -134,6 +142,7 @@ def corriger(carte: Carte, reponse: str | int) -> Correction:
         juste=juste,
         bonne_reponse=bonne_reponse(carte),
         explication=carte.explication,
+        reponse_donnee=str(reponse),
     )
 
 

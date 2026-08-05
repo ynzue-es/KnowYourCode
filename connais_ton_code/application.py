@@ -10,8 +10,13 @@ from PyQt6.QtWidgets import QApplication
 
 from .apparence import appliquer_theme_sombre
 from .barre_menu import BarreMenu
-from .evaluateur import Evaluateur, EvaluateurFactice, EvaluateurMistral, cle_mistral
 from .fenetre_principale import FenetrePrincipale
+from .generateur import (
+    Generateur,
+    GenerateurFactice,
+    GenerateurMistral,
+    cle_mistral,
+)
 from .historique import Historique
 from .orchestrateur import Orchestrateur
 from .panneau import Panneau
@@ -61,17 +66,17 @@ def _choisir_projet(factice: bool) -> Projet:
     return ProjetFactice()
 
 
-def _choisir_evaluateur(factice: bool) -> Evaluateur:
+def _choisir_generateur(factice: bool) -> Generateur:
     if factice:
-        return EvaluateurFactice()
+        return GenerateurFactice()
     cle = cle_mistral()
     if cle:
-        return EvaluateurMistral(cle)
+        return GenerateurMistral(cle)
     print(
-        "Aucune clé Mistral : évaluation factice. Renseigne MISTRAL_API_KEY "
-        "ou ~/.knowyourcode/cle_mistral."
+        "Aucune clé Mistral : cartes fabriquées sans modèle, à partir du seul "
+        "repérage. Renseigne MISTRAL_API_KEY ou ~/.knowyourcode/cle_mistral."
     )
-    return EvaluateurFactice()
+    return GenerateurFactice()
 
 
 def _choisir_selecteur(factice: bool) -> Selecteur:
@@ -103,7 +108,7 @@ def construire(application: QApplication, factice: bool = False) -> Orchestrateu
         barre=barre,
         projet=_choisir_projet(factice),
         selecteur=_choisir_selecteur(factice),
-        evaluateur=_choisir_evaluateur(factice),
+        generateur=_choisir_generateur(factice),
         historique=historique,
         parent=application,
     )
