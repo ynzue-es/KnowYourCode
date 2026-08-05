@@ -179,6 +179,19 @@ CADENCE_MS = 180
 ESSAIS_MAX = 25
 
 
+class GuetteurFige:
+    """Annonce un prompt, une fois. Programme contre le contrat du vrai."""
+
+    def __init__(self) -> None:
+        self._reste = True
+
+    def prompts(self) -> list[str]:
+        if not self._reste:
+            return []
+        self._reste = False
+        return ["/un/projet"]
+
+
 class GenerateurFige:
     """Rend toujours la même série, quel que soit l'extrait reçu.
 
@@ -425,6 +438,73 @@ def main() -> int:
         _verifier(orchestrateur.etat() is Etat.FERME, "la fermeture referme le panneau")
         _verifier(not panneau.isVisible(), "le panneau a bien disparu")
 
+    def _reveiller() -> None:
+        """Fait comme si un prompt venait de partir vers Claude Code."""
+        orchestrateur._guetteur_prompts = GuetteurFige()
+        orchestrateur._sur_guet()
+
+    def desaccord() -> None:
+        """Le réveil doit survivre à un panneau disparu sans prévenir.
+
+        On reproduit le cas en cachant la fenêtre sans passer par la fermeture,
+        comme le ferait macOS en retirant une fenêtre accessoire : l'état croit
+        le panneau ouvert alors que l'écran est vide. Sans rattrapage, le
+        réveil se tairait pour toujours après un seul raté.
+        """
+        orchestrateur.ouvrir()
+        panneau.blockSignals(True)
+        panneau.hide()
+        panneau.blockSignals(False)
+        _verifier(
+            orchestrateur.etat() is not Etat.FERME and not panneau.isVisible(),
+            "le désaccord entre l'état et l'écran est bien reproduit",
+        )
+
+        orchestrateur._reveil_actif = True
+        _reveiller()
+
+    def desaccord_suite() -> None:
+        """La série arrive au tour suivant : sa fabrication passe par un fil."""
+        _verifier(
+            panneau.isVisible(),
+            "le guet rattrape le désaccord et rouvre au lieu de se taire",
+        )
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION,
+            "le réveil pose bien une carte, pas seulement une fenêtre",
+        )
+
+        # L'inverse doit rester vrai : tant qu'une carte attend sa réponse, un
+        # prompt ne doit pas la balayer.
+        _reveiller()
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION
+            and panneau._etiquette_avancement.text() == f"1 / {TOTAL}",
+            "une carte en attente n'est pas balayée par le prompt suivant",
+        )
+
+    def repos_reveille() -> None:
+        """Un panneau laissé au repos doit repartir sur un prompt.
+
+        C'est le cas qui condamnait le réveil : après une série, la fenêtre
+        traîne à l'écran, l'état n'est plus « fermé », et s'en tenir à cet état
+        revenait à ne plus jamais rien poser.
+        """
+        orchestrateur.fermer()
+        orchestrateur.ouvrir()
+        _verifier(
+            orchestrateur.etat() is Etat.REPOS,
+            "le panneau ouvert sans série est bien au repos",
+        )
+        _reveiller()
+
+    def repos_reveille_suite() -> None:
+        _verifier(
+            orchestrateur.etat() is Etat.QUESTION,
+            "un prompt reçu au repos pose une série au lieu de ne rien faire",
+        )
+        orchestrateur.fermer()
+
     def fin() -> None:
         _verifier(
             orchestrateur.etat() is Etat.FERME,
@@ -440,7 +520,15 @@ def main() -> int:
             etapes.append(partial(carte, numero, juste))
             etapes.append(partial(correction, numero, juste))
         etapes.append(partial(bilan, juste))
-    etapes += [transitions_interdites, fermeture, fin]
+    etapes += [
+        transitions_interdites,
+        fermeture,
+        desaccord,
+        desaccord_suite,
+        repos_reveille,
+        repos_reveille_suite,
+        fin,
+    ]
 
     # Les étapes s'enchaînent, elles ne se minutent pas. Programmées d'avance
     # sur une horloge absolue, elles tombaient sur une fenêtre pas encore

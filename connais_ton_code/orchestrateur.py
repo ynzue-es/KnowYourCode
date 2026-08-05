@@ -41,6 +41,10 @@ MESSAGE_PREPARATION = "Je prépare les questions…"
 # toujours : c'est une demande explicite, elle mérite un essai même si les
 # précédents ont échoué.
 ECHECS_AVANT_DE_SE_TAIRE = 3
+
+# Les états depuis lesquels un prompt peut poser une série : ceux où rien
+# n'attend de réponse. Ce sont exactement ceux que `poser_question` accepte.
+ETATS_REVEILLABLES = frozenset({Etat.FERME, Etat.REPOS, Etat.BILAN})
 MESSAGE_ABANDON = "Série laissée de côté. Une autre quand vous voulez."
 
 
@@ -161,9 +165,21 @@ class Orchestrateur(QObject):
         if not parus or not self._reveil_actif:
             return
 
-        # Le seul refus qui reste : une série est déjà ouverte. Rouvrir
-        # dessus ferait perdre les réponses en cours.
-        if self._etat is not Etat.FERME:
+        # Le panneau peut avoir disparu de l'écran sans qu'on l'ait appris :
+        # macOS retire une fenêtre accessoire dans des cas qu'on ne maîtrise
+        # pas, et `hideEvent` ne parvient pas toujours. L'état dirait alors
+        # « ouvert » devant un écran vide, et le réveil se tairait
+        # définitivement — un seul raté suffirait à le condamner.
+        if self._etat is not Etat.FERME and not self._panneau.isVisible():
+            self._sur_masque()
+
+        # Ce qu'on refuse n'est pas d'être ouvert, c'est d'écraser une réponse
+        # en cours. Un panneau laissé au repos, ou resté sur son bilan, n'a
+        # rien à perdre : le prompt y pose une série au lieu de ne rien faire.
+        # S'en tenir à l'état fermé condamnait le réveil dès que le panneau
+        # traînait à l'écran, ce qui est le cas ordinaire quand on vient d'en
+        # finir une.
+        if self._etat not in ETATS_REVEILLABLES:
             return
 
         self.ouvrir()
