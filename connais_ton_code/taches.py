@@ -13,11 +13,15 @@ au repos.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Sequence
+
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 
 from .cartes import Serie
+from .couverture import Couverture, mesurer
 from .generateur import Generateur
-from .modeles import Extrait
+from .modeles import EntreeHistorique, Extrait
 
 
 class _SignauxFabrication(QObject):
@@ -48,3 +52,31 @@ class TacheFabrication(QRunnable):
         except Exception:  # noqa: BLE001 - on veut vraiment tout attraper
             serie = None
         self.signaux.terminee.emit(serie)
+
+
+class _SignauxCouverture(QObject):
+    terminee = pyqtSignal(object)
+    """Rend la `Couverture` mesurée, ou `None` si la mesure a échoué."""
+
+
+class TacheCouverture(QRunnable):
+    """Mesure la couverture du projet hors du fil de l'interface.
+
+    Le parcours du projet entier coûte un quart de seconde sur ce dépôt et
+    plus d'une demi-seconde sur un gros : c'est court pour un calcul, mais
+    long pour une fenêtre qui vient de s'ouvrir. Le tableau de bord s'affiche
+    donc d'abord, et cette mesure vient s'y poser quand elle est prête.
+    """
+
+    def __init__(self, entrees: Sequence[EntreeHistorique], dossier: Path | None):
+        super().__init__()
+        self._entrees = list(entrees)
+        self._dossier = dossier
+        self.signaux = _SignauxCouverture()
+
+    def run(self) -> None:
+        try:
+            resultat: Couverture | None = mesurer(self._entrees, self._dossier)
+        except Exception:  # noqa: BLE001 - une mesure ratée n'est pas une panne
+            resultat = None
+        self.signaux.terminee.emit(resultat)

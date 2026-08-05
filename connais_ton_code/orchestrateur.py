@@ -23,7 +23,7 @@ from .panneau import Panneau
 from .projet import Projet
 from .selecteur import Selecteur
 from .statistiques import calculer_statistiques
-from .taches import TacheFabrication
+from .taches import TacheCouverture, TacheFabrication
 
 if TYPE_CHECKING:  # pragma: no cover - le générateur n'est qu'un contrat ici
     from .generateur import Generateur
@@ -345,6 +345,17 @@ class Orchestrateur(QObject):
         self._fenetre.definir_rappel(rappel.est_installe())
         self._fenetre.definir_reveil(reveil.est_actif())
         self._fenetre.afficher(calculer_statistiques(self._historique.entrees()))
+        self._mesurer_la_couverture()
+
+    def _mesurer_la_couverture(self) -> None:
+        """Lance le parcours du projet, dont le résultat arrivera plus tard.
+
+        Une mesure par ouverture de fenêtre : le projet change entre deux, et
+        la garder au chaud donnerait un chiffre faux après un remaniement.
+        """
+        tache = TacheCouverture(self._historique.entrees(), self._projet.projet_actif())
+        tache.signaux.terminee.connect(self._fenetre.definir_couverture)
+        QThreadPool.globalInstance().start(tache)
 
     # ------------------------------------------------------------------
     # La série

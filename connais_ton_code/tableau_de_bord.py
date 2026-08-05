@@ -33,6 +33,7 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
+from .couverture import Couverture
 from .statistiques import Reussite, Statistiques
 
 LARGEUR = 560
@@ -316,6 +317,11 @@ class TableauDeBord(QWidget):
         # Taille minimale et non figée : la fenêtre doit pouvoir grandir.
         self.setMinimumSize(LARGEUR, HAUTEUR)
 
+        # La mesure du projet survit à un réaffichage : rouvrir la fenêtre ne
+        # doit pas remettre le bloc à vide le temps d'un nouveau parcours.
+        self._couverture: Couverture | None = None
+        self._bloc_couverture: QWidget | None = None
+
         exterieur = QVBoxLayout(self)
         exterieur.setContentsMargins(0, 0, 0, 0)
 
@@ -340,6 +346,7 @@ class TableauDeBord(QWidget):
     def afficher(self, statistiques: Statistiques) -> None:
         """Remplit la vue. Peut être rappelée autant de fois qu'on veut."""
         self._vider()
+        self._bloc_couverture = None
 
         # Le seuil est le jour d'activité et non la carte : quelqu'un qui
         # arrive de l'ancien exercice a une série à voir avant d'avoir répondu
@@ -350,6 +357,13 @@ class TableauDeBord(QWidget):
 
         self._poser(_Serie(statistiques))
         self._poser(self._cartes(statistiques))
+
+        # Le bloc est posé vide et se remplit quand la mesure arrive. Le poser
+        # après coup le ferait apparaître au milieu de la page une fois qu'on
+        # a commencé à lire.
+        self._bloc_couverture = self._section("Ce qu'il reste à voir", None)
+        self._poser(self._bloc_couverture)
+        self.definir_couverture(self._couverture)
         self._poser(
             self._section(
                 "Régularité",
@@ -459,6 +473,82 @@ class TableauDeBord(QWidget):
             ligne.addWidget(detail)
             colonne.addLayout(ligne)
         return bloc
+
+    def definir_couverture(self, couverture: Couverture | None) -> None:
+        """Pose la mesure du projet, qui arrive après le reste.
+
+        Le tableau s'affiche sans attendre : parcourir le projet entier prend
+        le temps qu'il faut, et une fenêtre qui se fige une demi-seconde à
+        l'ouverture se remarque plus qu'un chiffre qui arrive une demi-seconde
+        après tout le monde.
+        """
+        self._couverture = couverture
+        if self._bloc_couverture is None:
+            return
+
+        colonne = self._bloc_couverture.layout()
+        while colonne.count() > 1:
+            element = colonne.takeAt(1)
+            widget = element.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        if couverture is None or not couverture.fonctions_interrogeables:
+            colonne.addWidget(
+                self._attenue("Le projet n'a pas pu être parcouru.")
+            )
+            return
+
+        # « de ce projet » n'est pas une précision de style : la carte du haut
+        # compte les fonctions vues depuis toujours, tous projets confondus, et
+        # les deux chiffres se contrediraient à l'œil sans cette mention.
+        colonne.addLayout(
+            self._compteur(
+                "Notions de ce projet",
+                couverture.notions_vues,
+                couverture.notions_du_projet,
+                couverture.part_des_notions,
+            )
+        )
+        colonne.addLayout(
+            self._compteur(
+                "Fonctions de ce projet",
+                couverture.fonctions_vues,
+                couverture.fonctions_interrogeables,
+                couverture.part_des_fonctions,
+            )
+        )
+
+        if couverture.notions_restantes:
+            restantes = ", ".join(couverture.notions_restantes[:_NOTIONS_MONTREES])
+            if len(couverture.notions_restantes) > _NOTIONS_MONTREES:
+                restantes += "…"
+            colonne.addWidget(self._attenue(f"Jamais posées : {restantes}"))
+
+        colonne.addWidget(
+            self._attenue(
+                "Sur les fonctions que l'application sait interroger, c'est-à-dire "
+                "celles où elle a repéré de quoi tenir une série."
+            )
+        )
+
+    def _compteur(self, libelle: str, vus: int, total: int, part: float) -> QHBoxLayout:
+        ligne = QHBoxLayout()
+        ligne.setSpacing(8)
+        ligne.addWidget(BodyLabel(libelle))
+        ligne.addStretch(1)
+        ligne.addWidget(StrongBodyLabel(f"{part * 100:.0f} %"))
+        detail = CaptionLabel(f"{vus}/{total}")
+        detail.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+        ligne.addWidget(detail)
+        return ligne
+
+    def _attenue(self, texte: str) -> QWidget:
+        legende = CaptionLabel(texte)
+        legende.setStyleSheet(f"color: {_COULEUR_ATTENUE};")
+        legende.setWordWrap(True)
+        return legende
 
     def _section(
         self, titre: str, contenu: QWidget | None, note: str = ""

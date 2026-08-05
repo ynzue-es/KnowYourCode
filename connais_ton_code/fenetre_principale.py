@@ -220,6 +220,10 @@ class FenetrePrincipale(QWidget):
         self.raise_()
         self.activateWindow()
 
+    def definir_couverture(self, couverture) -> None:
+        """Pose la mesure du projet, qui arrive après l'affichage."""
+        self._tableau.definir_couverture(couverture)
+
     def definir_rappel(self, installe: bool) -> None:
         """Aligne l'interrupteur sur l'état réel, sans relancer le signal.
 

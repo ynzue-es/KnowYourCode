@@ -10,9 +10,10 @@ complètes.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QFontDatabase
 from PyQt6.QtWidgets import QWidget
 from qfluentwidgets import Theme, setFontFamilies, setTheme, setThemeColor
 
@@ -27,6 +28,37 @@ def appliquer_theme_sombre() -> None:
     setTheme(Theme.DARK)
     setThemeColor(QColor(COULEUR_ACCENT))
     _corriger_police_sur_macos()
+    enregistrer_police_du_code()
+
+
+# SF Mono est la monospace qu'Apple dessine pour lire du code : les chiffres et
+# les lettres qui se ressemblent s'y distinguent mieux que dans Menlo, livrée
+# depuis 2009. Elle est présente sur toute machine récente, mais n'est pas
+# déclarée aux applications ordinaires — il faut lui montrer le fichier.
+#
+# Deux emplacements, par ordre de préférence : le dossier des polices système,
+# puis celui du Terminal. Si aucun n'est là, Menlo reprend la main sans qu'on
+# ait à s'en occuper, puisque `POLICE_CODE` la nomme juste après.
+_FICHIERS_SF_MONO = (
+    "/System/Library/Fonts/SFNSMono.ttf",
+    "/System/Applications/Utilities/Terminal.app/Contents/Resources/Fonts"
+    "/SF-Mono-Regular.otf",
+)
+
+
+def enregistrer_police_du_code() -> tuple[str, ...]:
+    """Déclare SF Mono à Qt si elle est là. Rend les familles obtenues."""
+    if sys.platform != "darwin":
+        return ()
+
+    familles: list[str] = []
+    for chemin in _FICHIERS_SF_MONO:
+        if not Path(chemin).exists():
+            continue
+        identifiant = QFontDatabase.addApplicationFont(chemin)
+        if identifiant != -1:
+            familles.extend(QFontDatabase.applicationFontFamilies(identifiant))
+    return tuple(dict.fromkeys(familles))
 
 
 def _corriger_police_sur_macos() -> None:

@@ -32,6 +32,7 @@ os.environ["KNOWYOURCODE_DOSSIER"] = DOSSIER_TEST
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from connais_ton_code.cartes import Carte, Correction, Forme  # noqa: E402
+from connais_ton_code.couverture import mesurer  # noqa: E402
 from connais_ton_code.historique import Historique  # noqa: E402
 from connais_ton_code.modeles import (  # noqa: E402
     ANCIENNE,
@@ -477,6 +478,71 @@ def verifier_ecriture() -> None:
     )
 
 
+def verifier_couverture() -> None:
+    """La mesure de ce qu'il reste à voir, sur un projet écrit pour l'occasion."""
+    dossier = Path(tempfile.mkdtemp(prefix="knowyourcode-couverture-"))
+    (dossier / "riche.py").write_text(
+        "def charger(table, valeur, cache={}):\n"
+        "    if table in cache:\n"
+        "        return cache[table]\n"
+        "    try:\n"
+        "        resultat = eval(valeur)\n"
+        "    except:\n"
+        "        resultat = None\n"
+        "    return resultat\n",
+        encoding="utf-8",
+    )
+
+    vide = mesurer([], dossier)
+    _verifier(
+        vide.fonctions_interrogeables == 1 and vide.fonctions_vues == 0,
+        "sans historique, le projet est compté mais rien n'est vu",
+    )
+    _verifier(
+        vide.part_des_fonctions == 0.0 and vide.part_des_notions == 0.0,
+        "une couverture nulle ne divise pas par zéro",
+    )
+
+    absent = mesurer([], Path(DOSSIER_TEST) / "aucun-projet-ici")
+    _verifier(
+        absent.fonctions_interrogeables == 0,
+        "un projet introuvable rend une couverture vide plutôt qu'une erreur",
+    )
+
+    # Une fonction qu'on a vue puis supprimée du projet ne doit plus compter :
+    # sinon le numérateur finit par dépasser son dénominateur.
+    chemin = Path(DOSSIER_TEST) / "historique_couverture.json"
+    historique = Historique(chemin=chemin)
+    historique.enregistrer_carte(
+        Extrait(
+            identifiant="disparue.py:partie",
+            chemin_fichier="disparue.py",
+            nom_fonction="partie",
+            langage="python",
+            code="def partie():\n    return 1\n",
+        ),
+        Carte(
+            forme=Forme.QCM,
+            question="Ligne 1 ?",
+            explication="`partie` rend un entier.",
+            ligne=1,
+            options=("a", "b", "c", "d"),
+            bonne=0,
+            notion="fermeture",
+        ),
+        Correction(juste=True, bonne_reponse="a", explication="…"),
+    )
+    apres = mesurer(historique.entrees(), dossier)
+    _verifier(
+        apres.fonctions_vues == 0,
+        "une fonction disparue du projet ne gonfle plus le compte",
+    )
+    _verifier(
+        apres.notions_vues == 0 and "fermeture" not in apres.notions_restantes,
+        "une notion absente du projet ne compte ni comme vue ni comme restante",
+    )
+
+
 def main() -> int:
     verifier_serie()
     verifier_reussite()
@@ -486,6 +552,7 @@ def main() -> int:
     verifier_lecture_historique()
     verifier_ancien_fichier()
     verifier_ecriture()
+    verifier_couverture()
 
     for ok, description in _constats:
         print(f"{'  ok  ' if ok else 'ÉCHEC '} {description}")
