@@ -81,13 +81,8 @@ ECART_SOUS_LA_BARRE = 6
 # regard perdrait sa place au moment précis où il doit relire. Seuls Repos et
 # Bilan s'en écartent, puisqu'ils n'affichent pas de code du tout.
 HAUTEUR_ZONE_REPOS = 70
-HAUTEUR_ZONE_CARTE = 148
 HAUTEUR_ZONE_CORRECTION = 214
 HAUTEUR_ZONE_BILAN = 104
-
-# D'où la hauteur de la fenêtre en correction : ce que le bas gagne, la
-# fenêtre le prend, au lieu de le retirer au code.
-HAUTEUR_CORRECTION = HAUTEUR_MANCHE + HAUTEUR_ZONE_CORRECTION - HAUTEUR_ZONE_CARTE
 
 COULEUR_JUSTE = "#4ec9a0"
 COULEUR_FAUX = "#ff7b72"
@@ -106,6 +101,47 @@ _INDEX_BILAN = 3
 # Deux colonnes : quatre propositions à la file mangeraient la hauteur de la
 # zone de code, qui reste ce qu'on est venu lire.
 _COLONNES_QCM = 2
+
+# Au-delà, une proposition est à l'étroit sur une demi-largeur et passe seule
+# sur sa rangée. C'est la règle des plateformes de questionnaires : une
+# disposition horizontale repasse en vertical dès que la largeur manque.
+CARACTERES_COTE_A_COTE = 34
+
+# La largeur que le bouton s'autorise à réclamer. Qt donne à `QPushButton` le
+# même minimum que sa taille idéale, c'est-à-dire la largeur entière de son
+# libellé : une seule proposition longue imposait alors sa mesure à la fenêtre,
+# qui s'ouvrait à 935 pixels au lieu des 760 demandés. La documentation prévoit
+# le cas — redéfinir `minimumSizeHint` pour rendre moins laisse le bouton
+# rétrécir. Quatre-vingts est le minimum que Qt applique lui-même aux boutons.
+LARGEUR_MINIMALE_OPTION = 80
+
+# Un bouton confortable au clic et à la lecture, et l'air entre deux.
+HAUTEUR_BOUTON_OPTION = 34
+ECART_OPTIONS = 8
+
+
+def _colonnes_pour(options: tuple[str, ...]) -> int:
+    """Deux propositions par rangée, ou une seule si elles sont longues."""
+    if not options:
+        return 1
+    if max(len(texte) for texte in options) > CARACTERES_COTE_A_COTE:
+        return 1
+    return min(len(options), _COLONNES_QCM)
+
+
+def _rangees_pour(options: tuple[str, ...]) -> int:
+    colonnes = _colonnes_pour(options)
+    return max(1, -(-len(options) // colonnes))
+
+
+def _hauteur_des_options(options: tuple[str, ...]) -> int:
+    rangees = _rangees_pour(options)
+    return rangees * HAUTEUR_BOUTON_OPTION + (rangees - 1) * ECART_OPTIONS
+
+
+# La marge du cadre, dont il faut retirer deux fois la valeur pour connaître la
+# largeur qu'un texte a réellement pour se replier.
+MARGE_CADRE = 10
 
 
 def _activer_application() -> None:
@@ -202,6 +238,20 @@ def _code_numerote(code: str, langage: str) -> str:
         f" line-height:155%; color:{COULEUR_TEXTE_CODE};"
         f' white-space:pre; margin:0;">{corps}</pre>'
     )
+
+
+class BoutonReponse(PushButton):
+    """Une proposition cliquable, qui n'impose pas sa largeur à la fenêtre.
+
+    `QPushButton` rend la même valeur pour `sizeHint` et `minimumSizeHint` :
+    la largeur de son texte. Une proposition un peu longue devenait donc un
+    plancher pour la fenêtre entière, qui refusait ensuite de revenir à sa
+    taille. On ne redéfinit que ce minimum ; la taille idéale reste celle du
+    libellé, de sorte qu'une proposition courte n'est pas étirée sans raison.
+    """
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(LARGEUR_MINIMALE_OPTION, super().minimumSizeHint().height())
 
 
 class ZoneCode(TextEdit):
@@ -371,7 +421,7 @@ class Panneau(QWidget):
 
     def _construire_zone_basse(self) -> QWidget:
         self._pile = QStackedWidget(self._cadre)
-        self._pile.setFixedHeight(HAUTEUR_ZONE_CARTE)
+        self._pile.setFixedHeight(HAUTEUR_ZONE_REPOS)
         self._pile.addWidget(self._construire_page_repos())
         self._pile.addWidget(self._construire_page_carte())
         self._pile.addWidget(self._construire_page_correction())
@@ -568,7 +618,8 @@ class Panneau(QWidget):
 
         self._localisation.setVisible(True)
         self._zone_code.setVisible(True)
-        self._pile.setFixedHeight(HAUTEUR_ZONE_CARTE)
+        self._hauteur_zone_carte = self._mesurer_le_bas_de_carte()
+        self._pile.setFixedHeight(self._hauteur_zone_carte)
         self._pile.setCurrentIndex(_INDEX_CARTE)
 
         # Le panneau prend sa taille avant que le code n'arrive : c'est cette
@@ -578,6 +629,25 @@ class Panneau(QWidget):
 
         self._zone_code.montrer(extrait.code, extrait.langage, carte.ligne)
         self._reponse_ouverte = True
+
+    def _mesurer_le_bas_de_carte(self) -> int:
+        """Demande à la mise en page la hauteur qu'il lui faut, sans plus.
+
+        Une hauteur écrite à la main réserve toujours trop ou trop peu : trop,
+        et un vide s'ouvre entre la dernière proposition et le bouton ; trop
+        peu, et les propositions se recouvrent. Le layout, lui, sait compter.
+
+        Une seule chose lui échappe : une question qui se replie sur deux
+        lignes. Un libellé repliable annonce la hauteur d'une seule ligne tant
+        qu'on ne lui a pas dit sur quelle largeur il se replie — c'est le rôle
+        de `heightForWidth`, et c'est à nous de le lui demander.
+        """
+        largeur_utile = LARGEUR - 2 * MARGE_CADRE
+        self._etiquette_question.setMinimumHeight(
+            self._etiquette_question.heightForWidth(largeur_utile)
+        )
+        page = self._pile.widget(_INDEX_CARTE)
+        return page.layout().minimumSize().height()
 
     def afficher_correction(
         self, correction: Correction, numero: int, total: int
@@ -608,8 +678,13 @@ class Panneau(QWidget):
         # L'explication prend plus de place que la question : c'est la fenêtre
         # qui s'allonge, pas le code qui se serre. Le panneau étant ancré sous
         # la barre de menus, il grandit vers le bas et pas une ligne de code ne
-        # bouge — or c'est précisément l'instant où on la relit.
-        self.resize(LARGEUR, HAUTEUR_CORRECTION)
+        # bouge — or c'est précisément l'instant où on la relit. L'écart se
+        # mesure sur la carte qu'on vient de quitter, dont la hauteur dépendait
+        # de ses propositions.
+        self.resize(
+            LARGEUR,
+            HAUTEUR_MANCHE + HAUTEUR_ZONE_CORRECTION - self._hauteur_zone_carte,
+        )
         self._bouton_suivant.setFocus()
 
     def afficher_bilan(self, justes: int, total: int, commentaire: str) -> None:
@@ -681,12 +756,12 @@ class Panneau(QWidget):
             bouton.deleteLater()
         self._boutons_options = []
 
-        # Deux propositions tiennent côte à côte ; quatre passent en deux
-        # rangées, ce qui les garde toutes lisibles d'un seul regard.
-        colonnes = min(len(options), _COLONNES_QCM) or 1
+        colonnes = _colonnes_pour(options)
+        self._zone_options.setFixedHeight(_hauteur_des_options(options))
+
         for rang, texte in enumerate(options):
-            bouton = PushButton(texte, self._zone_options)
-            bouton.setMinimumHeight(31)
+            bouton = BoutonReponse(texte, self._zone_options)
+            bouton.setMinimumHeight(HAUTEUR_BOUTON_OPTION)
             bouton.clicked.connect(
                 lambda _=False, choix=texte: self._repondre(choix)
             )
